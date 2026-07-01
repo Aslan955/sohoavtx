@@ -1,0 +1,188 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Information about a company employee",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "department": { "type": "string" },
+        "position": { "type": "string" },
+        "level": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Probation", "Resigned"] },
+        "joinDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "fullName", "email"]
+    },
+    "Pakd": {
+      "title": "PAKD (Phương án kinh doanh)",
+      "description": "Cơ hội/PAKD theo khách hàng, vòng đời Nháp -> Hoàn tất (xem docs/ERD.md)",
+      "type": "object",
+      "properties": {
+        "pakdId": { "type": "string" },
+        "name": { "type": "string" },
+        "customerCode": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_BUSINESS_DIRECTOR", "PENDING_BOD", "PENDING_ACCOUNTANT", "PENDING_IT", "COMPLETED", "RETURNED"] },
+        "revenue": { "type": "number" },
+        "locked": { "type": "boolean" },
+        "version": { "type": "number" },
+        "masterCode": { "type": "string" },
+        "businessCode": { "type": "string" },
+        "productionCode": { "type": "string" },
+        "jiraKey": { "type": "string" },
+        "jiraUrl": { "type": "string" }
+      }
+    },
+    "ProjectStep": {
+      "title": "Bước thực hiện",
+      "description": "Bước động trong PAKD, có tiến độ và bảng chi phí",
+      "type": "object",
+      "properties": {
+        "pakdId": { "type": "string" },
+        "order": { "type": "number" },
+        "name": { "type": "string" },
+        "assignee": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "note": { "type": "string" }
+      }
+    },
+    "CostItem": {
+      "title": "Khoản chi phí",
+      "description": "Khoản chi phí động thuộc 1 bước",
+      "type": "object",
+      "properties": {
+        "stepId": { "type": "string" },
+        "name": { "type": "string" },
+        "costType": { "type": "string" },
+        "amount": { "type": "number" },
+        "note": { "type": "string" }
+      }
+    },
+    "ChangeRequest": {
+      "title": "Phiếu điều chỉnh chi phí",
+      "description": "Yêu cầu thay đổi chi phí sau khi PAKD đã khóa; duyệt GĐ Khối -> BOD -> Kế toán",
+      "type": "object",
+      "properties": {
+        "pakdId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_BUSINESS_DIRECTOR", "PENDING_BOD", "PENDING_ACCOUNTANT", "APPROVED", "REJECTED"] },
+        "reason": { "type": "string" }
+      }
+    },
+    "CostChange": {
+      "title": "Dòng thay đổi chi phí",
+      "description": "Một thay đổi (thêm/sửa/xóa) trong phiếu điều chỉnh",
+      "type": "object",
+      "properties": {
+        "changeRequestId": { "type": "string" },
+        "op": { "type": "string", "enum": ["ADD", "EDIT", "DELETE"] },
+        "stepId": { "type": "string" },
+        "targetCostId": { "type": "string" },
+        "costName": { "type": "string" },
+        "costType": { "type": "string" },
+        "oldAmount": { "type": "number" },
+        "newAmount": { "type": "number" }
+      }
+    },
+    "PakdVersion": {
+      "title": "Phiên bản chi phí PAKD",
+      "description": "Ảnh chụp khi áp dụng một phiếu điều chỉnh",
+      "type": "object",
+      "properties": {
+        "pakdId": { "type": "string" },
+        "version": { "type": "number" },
+        "changeRequestId": { "type": "string" },
+        "reason": { "type": "string" },
+        "totalCostBefore": { "type": "number" },
+        "totalCostAfter": { "type": "number" }
+      }
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Lịch sử mọi thao tác trên PAKD (append-only)",
+      "type": "object",
+      "properties": {
+        "pakdId": { "type": "string" },
+        "actor": { "type": "string" },
+        "role": { "type": "string" },
+        "action": { "type": "string" },
+        "oldStatus": { "type": "string" },
+        "newStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "LeaveRequest": {
+      "title": "Leave Request",
+      "description": "A request for time off by an employee",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "totalHours": { "type": "number" },
+        "status": { "type": "string", "enum": ["Requested", "Approved", "Rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Timesheet": {
+      "title": "Timesheet Entry",
+      "description": "Weekly log of hours worked on projects",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "weekEnding": { "type": "string", "format": "date" },
+        "hoursPerDay": { "type": "array", "items": { "type": "number" } },
+        "status": { "type": "string", "enum": ["Draft", "Submitted", "Approved"] }
+      }
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Main collection for employee profiles"
+    },
+    "/pakds/{pakdId}": {
+      "schema": "Pakd",
+      "description": "PAKD theo khách hàng (mã, trạng thái, khóa, phiên bản)"
+    },
+    "/pakds/{pakdId}/steps/{stepId}": {
+      "schema": "ProjectStep",
+      "description": "Các bước thực hiện động của PAKD"
+    },
+    "/pakds/{pakdId}/steps/{stepId}/costItems/{costId}": {
+      "schema": "CostItem",
+      "description": "Các khoản chi phí động của 1 bước"
+    },
+    "/pakds/{pakdId}/changeRequests/{crId}": {
+      "schema": "ChangeRequest",
+      "description": "Phiếu điều chỉnh chi phí của PAKD"
+    },
+    "/pakds/{pakdId}/changeRequests/{crId}/changes/{changeId}": {
+      "schema": "CostChange",
+      "description": "Các dòng thay đổi trong phiếu điều chỉnh"
+    },
+    "/pakds/{pakdId}/versions/{versionId}": {
+      "schema": "PakdVersion",
+      "description": "Lịch sử phiên bản chi phí PAKD"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Nhật ký hệ thống toàn cục, append-only"
+    },
+    "/leaves/{leaveId}": {
+      "schema": "LeaveRequest",
+      "description": "Leave requests submitted by employees"
+    },
+    "/timesheets/{timesheetId}": {
+      "schema": "Timesheet",
+      "description": "Weekly work logs for employees"
+    }
+  }
+}

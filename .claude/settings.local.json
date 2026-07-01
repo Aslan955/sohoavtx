@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m json.tool)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('firebase-blueprint.json','utf8'\\)\\); console.log\\('JSON_OK'\\)\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"vite --port=3000\")",
+      "Bash(nohup npm run dev)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)",
+      "Read(//tmp/**)",
+      "Bash(npx tsx *)",
+      "Bash(rm test_workflow.mjs)"
+    ]
+  }
+}
