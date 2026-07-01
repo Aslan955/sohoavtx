@@ -178,7 +178,7 @@ const LoginScreen: React.FC<{ onLogin: (u: typeof SYSTEM_USERS[number]) => void 
       <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         {/* left form */}
         <div className="p-8">
-          <div className="flex items-center gap-2 mb-1"><Layers className="text-blue-600" size={22} /><h1 className="text-lg font-black text-gray-900">Quản lý PAKD</h1></div>
+          <div className="flex items-center gap-2 mb-1"><Layers className="text-blue-600" size={22} /><h1 className="text-lg font-black text-gray-900">IMIS — Quản lý PAKD</h1></div>
           <p className="text-xs text-gray-500 mb-6">Đăng nhập để thực hiện các bước duyệt & nhập thông tin.</p>
           {err && <p className="text-xs text-red-600 font-medium mb-3">{err}</p>}
           <form onSubmit={submit} className="space-y-3">
