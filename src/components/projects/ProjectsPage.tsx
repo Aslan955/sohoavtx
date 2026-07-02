@@ -982,6 +982,7 @@ const PhaseTable: React.FC<{
         <table className="w-full text-[11px] border-collapse border border-gray-300">
           <thead>
             <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-center" style={{ minWidth: '58px' }}>Hiện tại</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '130px' }}>Giai đoạn</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Bắt đầu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Kết thúc</th>
@@ -1005,13 +1006,16 @@ const PhaseTable: React.FC<{
               const done = i + 1 < currentPhase; const isCur = i + 1 === currentPhase;
               const isLast = i === lastIdx;
               return (
-                <tr key={s.id} className={`border-b border-gray-200 ${phaseIdx === i ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}>
+                <tr key={s.id} className={`border-b border-gray-200 ${isCur ? 'bg-blue-50/70' : phaseIdx === i ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
+                  <Td center>
+                    {done
+                      ? <span title="Đã hoàn thành" className="inline-flex"><CheckCircle2 size={16} className="text-green-600" /></span>
+                      : isCur
+                        ? <span title={`Đang ở ${khCode(i)}`} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[9px] font-black animate-pulse">●</span>
+                        : <span className="text-gray-300">—</span>}
+                  </Td>
                   <Td>
-                    <div className="flex items-center gap-1.5">
-                      {done && <CheckCircle2 size={13} className="text-green-600 shrink-0" />}
-                      {isCur && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />}
-                      <span className="font-bold text-gray-800 shrink-0">{khCode(i)}</span>
-                    </div>
+                    <span className="font-bold text-gray-800">{khCode(i)}</span>
                     {editable ? <input value={s.name} onChange={(e) => onUpd(s.id, { name: e.target.value })} className={`${inp} mt-1`} title="Định nghĩa tên giai đoạn" /> : <span className="text-gray-500 block">{s.name}</span>}
                   </Td>
                   <Td>{editable ? <input type="date" value={s.startDate || ''} onChange={(e) => onUpd(s.id, { startDate: e.target.value })} className={inp} /> : (s.startDate || '—')}</Td>
@@ -1041,7 +1045,7 @@ const PhaseTable: React.FC<{
             })}
             {/* Tổng */}
             <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
-              <Td>Tổng</Td><Td></Td><Td></Td><Td></Td><Td></Td>
+              <Td></Td><Td>Tổng</Td><Td></Td><Td></Td><Td></Td><Td></Td>
               <Td right>{fmtFull(totSX)}</Td>
               <Td right>{fmtFull(totKD)}</Td>
               <Td right>{fmtFull(grand)}</Td>
