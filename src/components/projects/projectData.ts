@@ -68,6 +68,12 @@ export const BUSINESS_DIRECTORS = [
   'Lê Hoàng Sơn (GĐ Khối Viễn thông)',
   'Phạm Thu Hà (GĐ Khối Y tế số)',
 ];
+export const SALES_DIRECTORS = [
+  'Đỗ Mạnh Cường (GĐ Kinh doanh Miền Bắc)',
+  'Vũ Thị Lan (GĐ Kinh doanh Miền Trung)',
+  'Ngô Anh Tú (GĐ Kinh doanh Miền Nam)',
+  'Bùi Khánh Linh (GĐ Kinh doanh Khối CQNN)',
+];
 export const BIDDING_METHODS = ['Đấu thầu rộng rãi', 'Chào hàng cạnh tranh', 'Chỉ định thầu', 'Đấu thầu hạn chế'];
 export const FIELD_TYPES = ['Hàng hóa CNTT', 'Dịch vụ phi tư vấn', 'Dịch vụ tư vấn', 'Xây lắp hạ tầng CNTT', 'Hỗn hợp'];
 export const CONTRACT_TYPES = ['Trọn gói', 'Theo đơn giá điều chỉnh', 'Theo đơn giá cố định'];

@@ -137,6 +137,7 @@ export interface Pakd {
   // Thông tin cơ hội (Sale nhập khi khởi tạo)
   pmName?: string; // Người quản lý dự án (nhập ở giai đoạn sản xuất)
   businessDirector?: string; // Giám đốc khối
+  salesDirector?: string; // Giám đốc kinh doanh
   domain?: string; // Lĩnh vực: GOV / Giải pháp dịch vụ / Healthcare...
   projStart?: string; // Thời gian bắt đầu
   projEnd?: string; // Thời gian kết thúc

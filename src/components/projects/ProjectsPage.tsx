@@ -8,7 +8,7 @@ import {
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
-  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, makePhases, khCode,
+  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, makePhases, khCode,
 } from './projectData';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -109,7 +109,7 @@ export const ProjectsPage: React.FC = () => {
           </div>
           {simUser.role === 'SALE' && !current && (
             <button onClick={() => setCreateOpen(true)} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
-              <Plus size={16} className="mr-1" />Tạo cơ hội
+              <Plus size={16} className="mr-1" />Tạo dự án
             </button>
           )}
         </div>
@@ -445,6 +445,7 @@ const DetailView: React.FC<{
               <DRow label="Khách hàng" value={pakd.customerName} />
               <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
               <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
+              <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
               <DRow label="Domain" value={pakd.domain || '—'} />
               <DRow label="Người lập (Sale)" value={pakd.creator} />
               <DRow label="Thời gian thực hiện" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
@@ -1140,19 +1141,19 @@ const AuditView: React.FC<{ log: AuditLogEntry[] }> = ({ log }) => (
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], domain: DOMAINS[0],
+    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.name.trim() || !f.customerName.trim() || !f.businessDirector.trim()) { setErr('Cần nhập Tên cơ hội, Tên khách hàng và Giám đốc khối.'); return; }
+    if (!f.name.trim() || !f.customerName.trim() || !f.businessDirector.trim()) { setErr('Cần nhập Tên dự án, Tên khách hàng và Giám đốc khối.'); return; }
     if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
     onCreate({
       id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
       customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      businessDirector: f.businessDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
+      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
       tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
@@ -1164,15 +1165,16 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded shadow-lg w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
-          <h3 className="font-bold text-sm text-gray-900">Tạo Cơ hội kinh doanh</h3>
+          <h3 className="font-bold text-sm text-gray-900">Tạo Dự án</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
         {err && <p className="text-xs text-red-600 font-medium px-5 pt-3">{err}</p>}
         <form onSubmit={submit} className="p-5 grid grid-cols-2 gap-3">
-          <div className="col-span-2 space-y-1"><label className={lab}>Tên cơ hội / dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
+          <div className="col-span-2 space-y-1"><label className={lab}>Tên dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Tên khách hàng *</label><input value={f.customerName} onChange={(e) => setF({ ...f, customerName: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
+          <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Người lập (Sale)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
@@ -1189,7 +1191,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           </div>
           <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-gray-100 mt-1">
             <button type="button" onClick={onClose} className={Btn.ghost}>Hủy</button>
-            <button type="submit" className={Btn.primary}>Tạo cơ hội</button>
+            <button type="submit" className={Btn.primary}>Tạo dự án</button>
           </div>
         </form>
       </div>
