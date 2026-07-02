@@ -50,6 +50,9 @@ export interface ProjectStep {
   attachmentNote?: string; // tài liệu đính kèm (tên file / link) — cũ
   attachmentFiles?: { name: string; size: string }[]; // file đính kèm của giai đoạn
   budgetAdjustments?: BudgetAdjustment[]; // lịch sử/phiếu điều chỉnh ngân sách (cũ → mới, có luồng duyệt)
+  // Đề nghị chuyển sang giai đoạn kế tiếp — luồng GĐ Kinh doanh → GĐ Khối → Kế toán → BOD
+  advanceStatus?: 'PENDING_SALES_DIRECTOR' | 'PENDING_BUSINESS_DIRECTOR' | 'PENDING_ACCOUNTANT' | 'PENDING_BOD';
+  advanceApprovals?: { role: UserRole; actor: string; action: ApprovalAction; at: string; comment?: string }[];
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh

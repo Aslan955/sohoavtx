@@ -274,3 +274,56 @@ export function hasOpenChangeRequest(pakd: Pakd): boolean {
   return pakd.changeRequests.some(c => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_BOD', 'PENDING_ACCOUNTANT'].includes(c.status));
 }
 
+
+// ===================== Duyệt chuyển giai đoạn (AM → GĐ Kinh doanh → GĐ Khối → Kế toán → BOD) =====================
+type AdvStatus = 'PENDING_SALES_DIRECTOR' | 'PENDING_BUSINESS_DIRECTOR' | 'PENDING_ACCOUNTANT' | 'PENDING_BOD';
+export const ADV_STEPS: AdvStatus[] = ['PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'];
+export const ADV_LABEL: Record<AdvStatus, string> = {
+  PENDING_SALES_DIRECTOR: 'GĐ Kinh doanh', PENDING_BUSINESS_DIRECTOR: 'GĐ Khối', PENDING_ACCOUNTANT: 'Kế toán', PENDING_BOD: 'BOD',
+};
+export const ADV_PENDING_ROLE: Record<AdvStatus, UserRole> = {
+  PENDING_SALES_DIRECTOR: 'SALES_DIRECTOR', PENDING_BUSINESS_DIRECTOR: 'BUSINESS_DIRECTOR', PENDING_ACCOUNTANT: 'ACCOUNTANT', PENDING_BOD: 'BOD',
+};
+const ADV_NEXT: Record<AdvStatus, AdvStatus | null> = {
+  PENDING_SALES_DIRECTOR: 'PENDING_BUSINESS_DIRECTOR', PENDING_BUSINESS_DIRECTOR: 'PENDING_ACCOUNTANT', PENDING_ACCOUNTANT: 'PENDING_BOD', PENDING_BOD: null,
+};
+
+export function requestPhaseAdvance(pakd: Pakd, stepId: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  const step = pakd.steps.find(s => s.id === stepId);
+  if (!step) return { pakd, error: 'Không tìm thấy giai đoạn.' };
+  if (step.order >= pakd.steps.length) return { pakd, error: 'Đây là giai đoạn cuối, không có giai đoạn kế tiếp.' };
+  if (step.advanceStatus) return { pakd, error: 'Đang có đề nghị chuyển giai đoạn chờ duyệt.' };
+  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, advanceStatus: 'PENDING_SALES_DIRECTOR', advanceApprovals: [] } : s) };
+  pushAudit(log, updated, actor, 'SALE', `Đề nghị chuyển giai đoạn (${step.name} → giai đoạn kế tiếp)`, undefined, undefined, 'AM đề nghị hoàn thành giai đoạn, trình duyệt chuyển bước.');
+  return { pakd: updated };
+}
+
+export function decidePhaseAdvance(pakd: Pakd, stepId: string, role: UserRole, action: ApprovalAction, comment: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  const step = pakd.steps.find(s => s.id === stepId);
+  if (!step || !step.advanceStatus) return { pakd, error: 'Không có đề nghị chuyển giai đoạn.' };
+  const st = step.advanceStatus as AdvStatus;
+  if (ADV_PENDING_ROLE[st] !== role) return { pakd, error: 'Bạn không có quyền duyệt bước này.' };
+  const approvals = [...(step.advanceApprovals || []), { role, actor, action, at: nowStr(), comment }];
+
+  if (action === 'REJECT' || action === 'REQUEST_REVISION') {
+    const label = action === 'REJECT' ? 'Từ chối' : 'Yêu cầu bổ sung';
+    const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, advanceStatus: undefined, advanceApprovals: approvals } : s) };
+    pushAudit(log, updated, actor, role, `${label} chuyển giai đoạn (${step.name})`, undefined, undefined, comment || '');
+    return { pakd: updated };
+  }
+
+  const next = ADV_NEXT[st];
+  if (next) {
+    const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, advanceStatus: next, advanceApprovals: approvals } : s) };
+    pushAudit(log, updated, actor, role, `Duyệt chuyển giai đoạn (${ADV_LABEL[st]}) — ${step.name}`, ADV_LABEL[st], ADV_LABEL[next], comment || '');
+    return { pakd: updated };
+  }
+  // BOD duyệt cuối -> chuyển sang giai đoạn kế tiếp
+  const updated: Pakd = {
+    ...pakd,
+    currentPhase: step.order + 1,
+    steps: pakd.steps.map(s => s.id === stepId ? { ...s, advanceStatus: undefined, advanceApprovals: approvals } : s),
+  };
+  pushAudit(log, updated, actor, role, `Duyệt hoàn tất — chuyển sang giai đoạn kế tiếp (KH${String(step.order + 1).padStart(2, '0')})`, undefined, undefined, 'Đủ GĐ Kinh doanh → GĐ Khối → Kế toán → BOD.');
+  return { pakd: updated };
+}

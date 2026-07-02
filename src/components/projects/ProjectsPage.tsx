@@ -15,6 +15,7 @@ import {
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
   openOutsourceCode, hasOpenChangeRequest, rid,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
+  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
@@ -130,7 +131,9 @@ export const ProjectsPage: React.FC = () => {
           onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))}
           onCreateBudgetAdj={(sid, after, reason) => runAction(current.id, (p, l) => createBudgetAdjustment(p, sid, after, reason, simUser.fullName, l))}
           onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))}
-          onDecide={(action, comment) => runAction(current.id, (p, l) => approvePakd(p, simUser.role, action, comment, simUser.fullName, l))} />
+          onDecide={(action, comment) => runAction(current.id, (p, l) => approvePakd(p, simUser.role, action, comment, simUser.fullName, l))}
+          onRequestAdvance={(sid) => runAction(current.id, (p, l) => requestPhaseAdvance(p, sid, simUser.fullName, l))}
+          onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -306,7 +309,9 @@ const DetailView: React.FC<{
   onCreateBudgetAdj: (stepId: string, after: { business: number; production: number }, reason: string) => void;
   onDecideBudgetAdj: (stepId: string, adjId: string, action: ApprovalAction, comment: string) => void;
   onDecide: (action: ApprovalAction, comment: string) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide }) => {
+  onRequestAdvance: (stepId: string) => void;
+  onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance }) => {
   const [decision, setDecision] = useState('');
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role;
   const editable = canEditDirect(pakd, simUser.role);
@@ -503,6 +508,8 @@ const DetailView: React.FC<{
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
                 onUpd={updStep} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
+              <PhaseAdvancePanel pakd={pakd} currentPhase={currentPhase} simUser={simUser}
+                onRequest={onRequestAdvance} onDecide={onDecideAdvance} />
             </div>
           )}
 
@@ -656,10 +663,8 @@ const ProductionSheet: React.FC<{
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-gray-500">Giai đoạn: <b className="text-blue-700">{khCode(phaseIdx)} — {step.name}</b>{phaseIdx + 1 < currentPhase && <span className="ml-2 text-green-700 font-semibold">✓ Đã hoàn thành</span>}{phaseIdx + 1 === currentPhase && <span className="ml-2 text-blue-700 font-semibold">● Đang thực hiện</span>}</p>
-        {(simRole === 'BUSINESS_DIRECTOR' || simRole === 'ADMIN') && phaseIdx + 1 === currentPhase && currentPhase < pakd.steps.length && (
-          advanceBlockedMsg
-            ? <span className="flex items-center gap-1 text-[11px] text-amber-700"><Lock size={12} />{advanceBlockedMsg}</span>
-            : <button onClick={onCompletePhase} className={Btn.green}><CheckCircle2 size={13} className="mr-1" />Hoàn thành {khCode(phaseIdx)}, chuyển {khCode(phaseIdx + 1)}</button>
+        {phaseIdx + 1 === currentPhase && currentPhase < pakd.steps.length && (
+          <span className="text-[11px] text-gray-500 italic">Việc chuyển giai đoạn thực hiện ở tab <b>Phương án kinh doanh</b> (luồng duyệt AM → GĐ KD → GĐ Khối → Kế toán → BOD).</span>
         )}
       </div>
 
@@ -952,6 +957,77 @@ const BudgetHistoryModal: React.FC<{
           )}
           <p className="text-[10px] text-gray-400">AM / Giám đốc khối muốn đổi ngân sách phải tạo đề xuất; hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → BOD</b> mới được áp dụng.</p>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ===================== Panel duyệt chuyển giai đoạn (AM → GĐ KD → GĐ Khối → Kế toán → BOD) =====================
+const PhaseAdvancePanel: React.FC<{
+  pakd: Pakd; currentPhase: number; simUser: any;
+  onRequest: (stepId: string) => void; onDecide: (stepId: string, action: ApprovalAction, comment: string) => void;
+}> = ({ pakd, currentPhase, simUser, onRequest, onDecide }) => {
+  const step = pakd.steps[currentPhase - 1];
+  const [comment, setComment] = useState('');
+  if (!step) return null;
+  const isLast = currentPhase >= pakd.steps.length;
+  const adv = step.advanceStatus;
+  const pendingRole = adv ? ADV_PENDING_ROLE[adv] : null;
+  const canRequest = simUser.role === 'SALE' && !adv && !isLast;
+  const canDecide = adv && pendingRole === simUser.role;
+  const doneRoles = (step.advanceApprovals || []).filter(a => a.action === 'APPROVE').map(a => a.role);
+
+  return (
+    <div className="border border-gray-200 rounded">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+        <ChevronRight size={13} className="text-blue-600" />Duyệt chuyển giai đoạn — {khCode(currentPhase - 1)} → {isLast ? '(giai đoạn cuối)' : khCode(currentPhase)}
+      </div>
+      <div className="p-4 space-y-3">
+        {isLast ? (
+          <p className="text-[11px] text-gray-500 italic">Đây là giai đoạn cuối ({khCode(currentPhase - 1)} — {step.name}), không có bước chuyển tiếp.</p>
+        ) : (<>
+          {/* mini stepper */}
+          <div className="flex items-center">
+            {['AM (đề nghị)', ...ADV_STEPS.map(s => ADV_LABEL[s])].map((label, i) => {
+              const done = adv ? (i === 0 || doneRoles.includes(ADV_PENDING_ROLE[ADV_STEPS[i - 1]])) : false;
+              const isCur = adv ? ADV_STEPS[i - 1] === adv : false;
+              const started = !!adv;
+              const ok = i === 0 ? started : done;
+              return (
+                <React.Fragment key={i}>
+                  <div className="flex flex-col items-center">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${ok ? 'bg-green-500 text-white' : isCur ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{ok ? <Check size={12} /> : i + 1}</div>
+                    <span className={`text-[9px] mt-1 ${isCur ? 'text-blue-600 font-bold' : ok ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+                  </div>
+                  {i < ADV_STEPS.length && <div className={`flex-1 h-0.5 mx-1 ${(adv && doneRoles.includes(ADV_PENDING_ROLE[ADV_STEPS[i]])) || (i === 0 && started) ? 'bg-green-500' : 'bg-gray-200'}`} />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {!adv && <p className="text-[11px] text-gray-500">Chưa có đề nghị chuyển giai đoạn. {canRequest ? 'AM bấm nút bên dưới để trình duyệt.' : 'Chờ AM tạo đề nghị.'}</p>}
+          {adv && <p className="text-[11px] text-amber-700">Đang chờ <b>{ADV_LABEL[adv]}</b> duyệt.</p>}
+
+          {/* history */}
+          {(step.advanceApprovals || []).length > 0 && (
+            <div className="text-[11px] text-gray-500 space-y-0.5 border border-gray-100 rounded p-2 bg-gray-50/50">
+              {step.advanceApprovals!.map((a, k) => <div key={k}>• {a.at} — <b>{a.actor}</b> ({ROLE_LABEL[a.role]}): <span className={a.action === 'APPROVE' ? 'text-green-600' : 'text-red-600'}>{a.action === 'APPROVE' ? 'Duyệt' : a.action === 'REJECT' ? 'Từ chối' : 'Yêu cầu bổ sung'}</span>{a.comment ? ` — ${a.comment}` : ''}</div>)}
+            </div>
+          )}
+
+          {canRequest && <button onClick={() => onRequest(step.id)} className={Btn.primary}><ChevronRight size={13} className="mr-1" />Đề nghị hoàn thành & chuyển {khCode(currentPhase)}</button>}
+          {canDecide && (
+            <div className="flex flex-col lg:flex-row lg:items-center gap-2 border border-amber-200 bg-amber-50 rounded p-2">
+              <span className="text-[11px] font-semibold text-amber-800 shrink-0">Tới lượt {ROLE_LABEL[simUser.role]} duyệt:</span>
+              <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Ý kiến..." className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400" />
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => { onDecide(step.id, 'APPROVE', comment); setComment(''); }} className={Btn.green}><Check size={12} className="mr-1" />Duyệt</button>
+                <button onClick={() => { onDecide(step.id, 'REQUEST_REVISION', comment); setComment(''); }} className="flex items-center px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded hover:bg-amber-600">Cần bổ sung</button>
+                <button onClick={() => { onDecide(step.id, 'REJECT', comment); setComment(''); }} className={Btn.red}><Ban size={12} className="mr-1" />Từ chối</button>
+              </div>
+            </div>
+          )}
+        </>)}
       </div>
     </div>
   );
