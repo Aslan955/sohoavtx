@@ -118,6 +118,10 @@ const RAW_PAKDS: Pakd[] = [
       {
         id: 'S1', order: 1, name: 'Chi phí Kinh doanh', assignee: 'Lê Thu Trang (Sale)', startDate: '2026-05-10', endDate: '2026-06-30', note: 'Chi phí phát triển cơ hội, làm hồ sơ thầu và bán hàng',
         approvedBudget: 4500000000, revenue: 15000000000, businessBudget: 5000000000, productionBudget: 1000000000,
+        budgetHistory: [
+          { at: '2026-05-14 09:00', by: 'Nguyễn Tiến Dũng', business: 5000000000, production: 1000000000, note: 'Điều chỉnh tăng NS kinh doanh' },
+          { at: '2026-05-11 10:30', by: 'Lê Thu Trang', business: 4000000000, production: 1000000000, note: 'Lập lần đầu' },
+        ],
         productionInfo: { workOrder: 'WO-2026-045', projectType: 'External', priority: 'High', size: 'Large', department: 'SX - Telco', projectManager: 'V00914 - Trần Minh Quang', domain: 'GOV', customer: 'Viettel', startDate: '2026-06-01', endDate: '2026-07-15', status: 'CLOSED' },
         costItems: [
           { id: 'C1', name: 'Chi phí đội bán hàng & tư vấn giải pháp', costType: 'Nhân công triển khai', amount: 1800000000, versionAmounts: [2000000000], actualAmount: 1900000000 },

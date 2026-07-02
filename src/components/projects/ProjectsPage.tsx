@@ -309,6 +309,7 @@ const DetailView: React.FC<{
   const [osLabel, setOsLabel] = useState('');
   const [sheet, setSheet] = useState<'BUSINESS' | 'PRODUCTION'>('BUSINESS');
   const [phaseIdx, setPhaseIdx] = useState(0); // KH01..KH06
+  const [histIdx, setHistIdx] = useState<number | null>(null); // xem lịch sử ĐC ngân sách của giai đoạn
   const [showComments, setShowComments] = useState(true);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
@@ -323,6 +324,15 @@ const DetailView: React.FC<{
   const prodEditable = afterAccounting;
 
   const updStep = (sid: string, patch: Partial<ProjectStep>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, ...patch } : s) }));
+  // Ghi lịch sử điều chỉnh ngân sách của giai đoạn (gọi khi rời ô nhập)
+  const logBudget = (sid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => {
+    if (s.id !== sid) return s;
+    const hist = s.budgetHistory || [];
+    const b = s.businessBudget || 0, pr = s.productionBudget || 0;
+    const last = hist[0];
+    if (last && last.business === b && last.production === pr) return s;
+    return { ...s, budgetHistory: [{ at: new Date().toISOString().replace('T', ' ').substring(0, 16), by: simUser.fullName, business: b, production: pr }, ...hist] };
+  }) }));
   // Thêm / xóa giai đoạn (KH có thể định nghĩa và cộng thêm tùy dự án)
   const addPhase = () => setPakd(p => ({ ...p, steps: [...p.steps, { id: khCode(p.steps.length), order: p.steps.length + 1, name: `Giai đoạn ${p.steps.length + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] }] }));
   const rmPhase = (idx: number) => setPakd(p => p.steps.length <= 6 ? p : { ...p, steps: p.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, id: khCode(i), order: i + 1 })) });
@@ -475,7 +485,7 @@ const DetailView: React.FC<{
             <div className="p-4 space-y-4">
               {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
-                onUpd={updStep} onOpenDetail={(i) => setPhaseIdx(i)} phaseIdx={phaseIdx}
+                onUpd={updStep} onLogBudget={logBudget} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
             </div>
           )}
@@ -532,6 +542,7 @@ const DetailView: React.FC<{
       </div>
 
       {crOpen && <ChangeRequestModal pakd={pakd} onClose={() => setCrOpen(false)} onSubmit={(r, c) => { onCreateCR(r, c); setCrOpen(false); }} />}
+      {histIdx !== null && pakd.steps[histIdx] && <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} onClose={() => setHistIdx(null)} />}
     </div>
   );
 };
@@ -834,12 +845,58 @@ const AttachCell: React.FC<{ step: ProjectStep; editable: boolean; onUpd: (patch
   );
 };
 
+// ===================== Modal lịch sử điều chỉnh ngân sách của giai đoạn =====================
+const BudgetHistoryModal: React.FC<{ step: ProjectStep; phaseCode: string; onClose: () => void }> = ({ step, phaseCode, onClose }) => {
+  const hist = step.budgetHistory || [];
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded shadow-lg w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
+          <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2"><History size={15} className="text-blue-600" />Lịch sử điều chỉnh ngân sách — {phaseCode} ({step.name})</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <div className="p-4">
+          {hist.length === 0 ? (
+            <p className="text-xs text-gray-400 italic text-center py-8">Chưa có điều chỉnh ngân sách nào cho giai đoạn này.</p>
+          ) : (
+            <table className="w-full text-[11px] border-collapse border border-gray-200">
+              <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <Th w="34px" center>Lần</Th><Th w="130px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th>
+                <Th w="110px" right>NS Kinh doanh</Th><Th w="110px" right>NS Sản xuất</Th><Th w="110px" right>Tổng</Th><Th w="120px" right>Chênh lệch tổng</Th>
+              </tr></thead>
+              <tbody>
+                {hist.map((h, i) => {
+                  const tot = h.business + h.production;
+                  const prev = hist[i + 1]; // bản cũ hơn
+                  const diff = prev ? tot - (prev.business + prev.production) : 0;
+                  return (
+                    <tr key={i} className="border-b border-gray-100">
+                      <Td center muted>{hist.length - i}</Td>
+                      <Td mono>{h.at}</Td>
+                      <Td>{h.by}</Td>
+                      <Td right>{fmtFull(h.business)}</Td>
+                      <Td right>{fmtFull(h.production)}</Td>
+                      <Td right><b>{fmtFull(tot)}</b></Td>
+                      <Td right>{prev ? <span className={diff > 0 ? 'text-red-600 font-semibold' : diff < 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}>{diff > 0 ? '+' : ''}{fmtFull(diff)}</span> : <span className="text-gray-300">— (lần đầu)</span>}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <p className="text-[10px] text-gray-400 mt-3">Mỗi lần thay đổi mức phân bổ NS Kinh doanh / Sản xuất của giai đoạn sẽ được ghi lại tại đây.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number;
   onUpd: (sid: string, patch: Partial<ProjectStep>) => void;
-  onOpenDetail: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onOpenDetail, onAddPhase, onRmPhase }) => {
+  onLogBudget: (sid: string) => void; onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onLogBudget, onShowHistory, onAddPhase, onRmPhase }) => {
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
   const revenue = steps[lastIdx]?.revenue || 0;
@@ -868,7 +925,7 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '120px' }}>Doanh thu dự kiến</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '85px' }}>% Chi phí/DT</th>
-              <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}></th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}>Lịch sử NS</th>
             </tr>
             <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
@@ -895,8 +952,8 @@ const PhaseTable: React.FC<{
                   <Td>{editable ? <input type="date" value={s.endDate || ''} onChange={(e) => onUpd(s.id, { endDate: e.target.value })} className={inp} /> : (s.endDate || '—')}</Td>
                   <Td>{editable ? <textarea rows={1} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : (s.objective || '—')}</Td>
                   <Td>{editable ? <textarea rows={1} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : (s.output || '—')}</Td>
-                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
-                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
+                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} onBlur={() => onLogBudget(s.id)} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
+                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} onBlur={() => onLogBudget(s.id)} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
@@ -906,7 +963,10 @@ const PhaseTable: React.FC<{
                   <Td right>{isLast && revenue > 0 ? <b>{((rowTotal / revenue) * 100).toFixed(0)}%</b> : <span className="text-gray-300">—</span>}</Td>
                   <Td center>
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => onOpenDetail(i)} title="Chi tiết chi phí giai đoạn" className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Eye size={13} /></button>
+                      <button onClick={() => onShowHistory(i)} title="Lịch sử điều chỉnh ngân sách" className="relative p-1 text-blue-600 hover:bg-blue-100 rounded">
+                        <History size={13} />
+                        {(s.budgetHistory?.length || 0) > 0 && <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{s.budgetHistory!.length}</span>}
+                      </button>
                       {editable && i >= 6 && <button onClick={() => onRmPhase(i)} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
                     </div>
                   </Td>

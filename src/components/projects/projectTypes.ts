@@ -48,6 +48,7 @@ export interface ProjectStep {
   output?: string; // kết quả đầu ra của phase
   attachmentNote?: string; // tài liệu đính kèm (tên file / link) — cũ
   attachmentFiles?: { name: string; size: string }[]; // file đính kèm của giai đoạn
+  budgetHistory?: { at: string; by: string; business: number; production: number; note?: string }[]; // lịch sử điều chỉnh ngân sách
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh
