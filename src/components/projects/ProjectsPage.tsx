@@ -21,12 +21,12 @@ type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
-  PENDING_BUSINESS_DIRECTOR: 'bg-orange-400', PENDING_BOD: 'bg-orange-400', PENDING_ACCOUNTANT: 'bg-orange-400',
+  PENDING_SALES_DIRECTOR: 'bg-orange-400', PENDING_BUSINESS_DIRECTOR: 'bg-orange-400', PENDING_BOD: 'bg-orange-400', PENDING_ACCOUNTANT: 'bg-orange-400',
   PENDING_IT: 'bg-sky-500', COMPLETED: 'bg-green-500',
 };
 
 const ROLE_LABEL: Record<string, string> = {
-  SALE: 'Sale', BUSINESS_DIRECTOR: 'Giám đốc Khối', BOD: 'Ban Giám đốc (BOD)',
+  SALE: 'AM (Account Manager)', SALES_DIRECTOR: 'GĐ Kinh doanh', BUSINESS_DIRECTOR: 'Giám đốc Khối', BOD: 'Ban Giám đốc (BOD)',
   ACCOUNTANT: 'Kế toán', IT: 'IT', PRODUCTION: 'Khối Sản xuất', ADMIN: 'Quản trị',
 };
 
@@ -167,7 +167,7 @@ const LoginScreen: React.FC<{ onLogin: (u: typeof SYSTEM_USERS[number]) => void 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
-  const workflowUsers = SYSTEM_USERS.filter(u => ['SALE', 'BUSINESS_DIRECTOR', 'BOD', 'ACCOUNTANT', 'IT'].includes(u.role));
+  const workflowUsers = SYSTEM_USERS.filter(u => ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ACCOUNTANT', 'BOD'].includes(u.role));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -325,7 +325,7 @@ const DetailView: React.FC<{
   const costEditable = editable || (simUser.role === 'SALE' && adjusting);
   const startAdjust = () => { setAdjusting(true); if ((pakd.costVersions || 0) === 0) addVersionColumn(); };
   // Giai đoạn triển khai chỉ lập SAU KHI Kế toán duyệt (status đã sang Chờ IT / Hoàn tất)
-  const afterAccounting = ['PENDING_IT', 'COMPLETED'].includes(pakd.status);
+  const afterAccounting = ['PENDING_BOD', 'PENDING_IT', 'COMPLETED'].includes(pakd.status);
   const prodEditable = afterAccounting;
 
   const updStep = (sid: string, patch: Partial<ProjectStep>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, ...patch } : s) }));

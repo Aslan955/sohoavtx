@@ -38,7 +38,8 @@ export function normalizePhases(p: Pakd): Pakd {
 }
 
 export const SYSTEM_USERS: SystemUser[] = [
-  { id: 'U1', fullName: 'Lê Thu Trang', role: 'SALE', department: 'Sale', username: 'sale', password: '123456' },
+  { id: 'U1', fullName: 'Lê Thu Trang', role: 'SALE', department: 'AM - Account Manager', username: 'am', password: '123456' },
+  { id: 'U8', fullName: 'Đỗ Mạnh Cường', role: 'SALES_DIRECTOR', department: 'Kinh doanh', username: 'gdkd', password: '123456' },
   { id: 'U2', fullName: 'Nguyễn Tiến Dũng', role: 'BUSINESS_DIRECTOR', department: 'Khối Giải pháp Doanh nghiệp', username: 'gdkhoi', password: '123456' },
   { id: 'U3', fullName: 'Phạm Minh Hải', role: 'BOD', department: 'Ban Giám đốc', username: 'bod', password: '123456' },
   { id: 'U4', fullName: 'Lê Thị Mai', role: 'ACCOUNTANT', department: 'Kế toán', username: 'ketoan', password: '123456' },

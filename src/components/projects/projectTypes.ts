@@ -1,7 +1,7 @@
 // Types cho module PLM — PAKD động (bước + chi phí) với khóa sau duyệt & phiếu điều chỉnh.
 // Xem docs/ERD.md cho thiết kế bảng dữ liệu tương ứng khi triển khai backend thật.
 
-export type UserRole = 'SALE' | 'BUSINESS_DIRECTOR' | 'BOD' | 'ACCOUNTANT' | 'IT' | 'PRODUCTION' | 'ADMIN';
+export type UserRole = 'SALE' | 'SALES_DIRECTOR' | 'BUSINESS_DIRECTOR' | 'BOD' | 'ACCOUNTANT' | 'IT' | 'PRODUCTION' | 'ADMIN';
 
 export interface SystemUser {
   id: string;
@@ -15,6 +15,7 @@ export interface SystemUser {
 // Trạng thái PAKD — luồng tuyến tính luôn qua BOD.
 export type PakdStatus =
   | 'DRAFT'
+  | 'PENDING_SALES_DIRECTOR'
   | 'PENDING_BUSINESS_DIRECTOR'
   | 'PENDING_BOD'
   | 'PENDING_ACCOUNTANT'
