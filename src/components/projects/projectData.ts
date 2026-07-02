@@ -254,7 +254,7 @@ const RAW_PAKDS: Pakd[] = [
     customerCode: 'SSTT_BN',
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-24 14:00',
-    status: 'PENDING_IT',
+    status: 'COMPLETED',
     tender: { packageCode: 'TBMT-26.0830', investor: 'Sở Thông tin và Truyền thông Bắc Ninh', biddingMethod: 'Chào hàng cạnh tranh', fieldType: 'Hàng hóa CNTT', contractType: 'Trọn gói', packagePrice: 7500000000, bidSecurity: 110000000, closeDate: '2026-06-21' },
     revenue: 7000000000,
     locked: true,

@@ -10,33 +10,32 @@ export const rid = (prefix: string) => `${prefix}-${Math.random().toString(36).s
 // ----- Nhãn hiển thị -----
 export const PAKD_STATUS_LABEL: Record<PakdStatus, string> = {
   DRAFT: 'Nháp',
-  PENDING_BUSINESS_DIRECTOR: 'Chờ GĐ Khối',
-  PENDING_BOD: 'Chờ BOD',
-  PENDING_ACCOUNTANT: 'Chờ Kế toán',
-  PENDING_IT: 'Chờ IT',
+  PENDING_BUSINESS_DIRECTOR: 'GĐ Khối',
+  PENDING_BOD: 'BOD',
+  PENDING_ACCOUNTANT: 'Kế toán',
+  PENDING_IT: 'IT',
   COMPLETED: 'Hoàn tất',
   RETURNED: 'Bị trả lại',
 };
 
 export const CR_STATUS_LABEL: Record<ChangeRequestStatus, string> = {
   DRAFT: 'Nháp',
-  PENDING_BUSINESS_DIRECTOR: 'Chờ GĐ Khối',
-  PENDING_BOD: 'Chờ BOD',
-  PENDING_ACCOUNTANT: 'Chờ Kế toán',
+  PENDING_BUSINESS_DIRECTOR: 'GĐ Khối',
+  PENDING_BOD: 'BOD',
+  PENDING_ACCOUNTANT: 'Kế toán',
   APPROVED: 'Đã duyệt (đã áp dụng)',
   REJECTED: 'Từ chối',
 };
 
-// Luồng duyệt PAKD tuyến tính: trạng thái -> role cần duyệt
+// Luồng duyệt PAKD tuyến tính: trạng thái -> role cần duyệt (bỏ bước IT)
 export const PAKD_PENDING_ROLE: Partial<Record<PakdStatus, UserRole>> = {
   PENDING_BUSINESS_DIRECTOR: 'BUSINESS_DIRECTOR',
   PENDING_BOD: 'BOD',
   PENDING_ACCOUNTANT: 'ACCOUNTANT',
-  PENDING_IT: 'IT',
 };
 
 export const PAKD_FLOW: PakdStatus[] = [
-  'DRAFT', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_BOD', 'PENDING_ACCOUNTANT', 'PENDING_IT', 'COMPLETED',
+  'DRAFT', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_BOD', 'PENDING_ACCOUNTANT', 'COMPLETED',
 ];
 
 // Luồng duyệt phiếu điều chỉnh: GĐ Khối -> BOD -> Kế toán
@@ -79,8 +78,7 @@ function generateCodes(pakd: Pakd): Pick<Pakd, 'masterCode' | 'businessCode' | '
 const PAKD_NEXT_ON_APPROVE: Partial<Record<PakdStatus, PakdStatus>> = {
   PENDING_BUSINESS_DIRECTOR: 'PENDING_BOD',
   PENDING_BOD: 'PENDING_ACCOUNTANT',
-  PENDING_ACCOUNTANT: 'PENDING_IT',
-  PENDING_IT: 'COMPLETED',
+  PENDING_ACCOUNTANT: 'COMPLETED', // Kế toán duyệt là hoàn tất (bỏ bước IT)
 };
 
 // ----- Phê duyệt PAKD (1 cấp) -----
@@ -117,11 +115,11 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction, 
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Sinh mã & khóa chi phí', old, next, `Mã tổng ${codes.masterCode}, Mã KD ${codes.businessCode}, Mã SX ${codes.productionCode}. Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }
 
-  // IT duyệt (PENDING_IT -> COMPLETED) -> tạo dự án Jira
-  if (pakd.status === 'PENDING_IT') {
+  // Kế toán duyệt (-> COMPLETED) -> hệ thống tự tạo dự án Jira
+  if (pakd.status === 'PENDING_ACCOUNTANT') {
     const key = pakd.customerCode.substring(0, 6).toUpperCase();
     updated = { ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}` };
-    pushAudit(log, updated, actor, role, 'Tạo dự án Jira', old, next, `Đã tạo project Jira ${key}.`);
+    pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Tạo dự án Jira', old, next, `Đã tạo project Jira ${key}.`);
   }
 
   pushAudit(log, updated, actor, role, `Phê duyệt (${stepLabel})`, old, next, record.comment);
