@@ -477,21 +477,6 @@ const DetailView: React.FC<{
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
                 onUpd={updStep} onOpenDetail={(i) => setPhaseIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
-
-              {/* Chi tiết chi phí của giai đoạn đang chọn */}
-              <div className="border-t border-gray-200 pt-3 space-y-3">
-                <SectionTitle>Chi tiết chi phí — {khCode(phaseIdx)} ({pakd.steps[phaseIdx]?.name})</SectionTitle>
-                {actualEditable && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">✏️ Bạn đang là <b>Kế toán</b>: nhập ở cột <b>"Kế toán duyệt chi"</b> (ô vàng) cho từng khoản chi phí.</p>}
-                {adjusting && <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded px-3 py-1.5">📝 Đang ở <b>chế độ phiếu điều chỉnh</b> — bổ sung / đổi tên / xóa khoản chi phí; nhập số ở cột <b>V{costVersions + 1}</b>. Bấm "Xong điều chỉnh" khi hoàn tất.</p>}
-                {pakd.steps[phaseIdx] && (
-                  <PhaseSheet step={pakd.steps[phaseIdx]} phaseCode={khCode(phaseIdx)} editable={editable} costEditable={costEditable} actualEditable={actualEditable} showRevenue={phaseIdx === pakd.steps.length - 1}
-                    isCurrentPhase={phaseIdx + 1 === currentPhase} isDonePhase={phaseIdx + 1 < currentPhase} canSetPhase={simUser.role === 'SALE'} advanceBlockedMsg={advanceBlockedMsg} onSetCurrent={() => setCurrentPhase(phaseIdx + 1)} onCompletePhase={() => setCurrentPhase(Math.min(pakd.steps.length, phaseIdx + 2))}
-                    costVersions={costVersions} onAddVersion={addVersionColumn} canAddVersion={costEditable}
-                    onUpd={(patch) => updStep(pakd.steps[phaseIdx].id, patch)}
-                    onAddCost={(it) => addCost(pakd.steps[phaseIdx].id, it)} onUpdCost={(cid, p) => updCost(pakd.steps[phaseIdx].id, cid, p)} onRmCost={(cid) => rmCost(pakd.steps[phaseIdx].id, cid)}
-                    onAddProdCost={(it) => addProdCost(pakd.steps[phaseIdx].id, it)} onUpdProdCost={(cid, p) => updProdCost(pakd.steps[phaseIdx].id, cid, p)} onRmProdCost={(cid) => rmProdCost(pakd.steps[phaseIdx].id, cid)} />
-                )}
-              </div>
             </div>
           )}
 
@@ -942,7 +927,7 @@ const PhaseTable: React.FC<{
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-gray-400">Bấm <Eye size={10} className="inline" /> để mở chi tiết chi phí của giai đoạn • Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Giai đoạn có thể định nghĩa lại tên và thêm mới ({khCode(steps.length)}...).</p>
+      <p className="text-[10px] text-gray-400">Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Giai đoạn có thể định nghĩa lại tên và thêm mới ({khCode(steps.length)}...).</p>
     </div>
   );
 };
