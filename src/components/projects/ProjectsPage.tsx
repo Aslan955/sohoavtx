@@ -338,10 +338,12 @@ const DetailView: React.FC<{
   const rmTask = (sid: string, tid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).filter(t => t.id !== tid) } : s) }));
   const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
 
-  // Điều kiện chuyển KH tiếp theo: GĐ Khối đã nhập đủ thông tin dự án sản xuất của KH hiện tại
-  const curStep = pakd.steps[currentPhase - 1];
-  const prodInfoComplete = !!(curStep?.productionInfo?.projectManager && curStep?.productionInfo?.startDate && curStep?.productionInfo?.endDate);
-  const advanceBlockedMsg = prodInfoComplete ? '' : `GĐ Khối chưa nhập đủ Thông tin dự án sản xuất của KH0${currentPhase} (PM, ngày bắt đầu/kết thúc) — chưa thể chuyển giai đoạn.`;
+  // Thông tin dự án sản xuất được nhập ở KH02. Chỉ chặn chuyển giai đoạn khi đang ở KH02 mà chưa nhập đủ.
+  const kh02 = pakd.steps[1];
+  const kh02InfoComplete = !!(kh02?.productionInfo?.projectManager && kh02?.productionInfo?.startDate && kh02?.productionInfo?.endDate);
+  const advanceBlockedMsg = (currentPhase === 2 && !kh02InfoComplete)
+    ? 'GĐ Khối chưa nhập đủ Thông tin dự án sản xuất ở KH02 (PM, ngày bắt đầu/kết thúc) — chưa thể chuyển giai đoạn.'
+    : '';
 
   return (
     <div className="space-y-4">
@@ -499,7 +501,7 @@ const DetailView: React.FC<{
             <ProductionSheet pakd={pakd} prodEditable={prodEditable} simRole={simUser.role} afterAccounting={afterAccounting}
               phaseIdx={phaseIdx} setPhaseIdx={setPhaseIdx} currentPhase={currentPhase}
               onUpdInfo={updProdInfo} onAdd={addTask} onUpd={updTask} onRm={rmTask}
-              onCompletePhase={() => setCurrentPhase(Math.min(6, currentPhase + 1))} />
+              advanceBlockedMsg={advanceBlockedMsg} onCompletePhase={() => setCurrentPhase(Math.min(6, currentPhase + 1))} />
           )}
         </div>
       </div>
@@ -609,10 +611,10 @@ const PROD_INFO_FIELDS: { key: keyof ProductionInfo; label: string; type?: strin
 
 const ProductionSheet: React.FC<{
   pakd: Pakd; prodEditable: boolean; simRole: string; afterAccounting: boolean;
-  phaseIdx: number; setPhaseIdx: (i: number) => void; currentPhase: number; onCompletePhase: () => void;
+  phaseIdx: number; setPhaseIdx: (i: number) => void; currentPhase: number; onCompletePhase: () => void; advanceBlockedMsg?: string;
   onUpdInfo: (sid: string, patch: Partial<ProductionInfo>) => void;
   onAdd: (sid: string) => void; onUpd: (sid: string, tid: string, patch: Partial<ProductionTask>) => void; onRm: (sid: string, tid: string) => void;
-}> = ({ pakd, prodEditable, simRole, afterAccounting, phaseIdx, setPhaseIdx, currentPhase, onCompletePhase, onUpdInfo, onAdd, onUpd, onRm }) => {
+}> = ({ pakd, prodEditable, simRole, afterAccounting, phaseIdx, setPhaseIdx, currentPhase, onCompletePhase, advanceBlockedMsg, onUpdInfo, onAdd, onUpd, onRm }) => {
   const step = pakd.steps[phaseIdx];
   const tasks = step?.productionTasks || [];
   const info = step?.productionInfo || {};
@@ -641,16 +643,20 @@ const ProductionSheet: React.FC<{
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-gray-500">Giai đoạn: <b className="text-blue-700">KH0{phaseIdx + 1} — {step.name}</b>{phaseIdx + 1 < currentPhase && <span className="ml-2 text-green-700 font-semibold">✓ Đã hoàn thành</span>}{phaseIdx + 1 === currentPhase && <span className="ml-2 text-blue-700 font-semibold">● Đang thực hiện</span>}</p>
         {(simRole === 'BUSINESS_DIRECTOR' || simRole === 'ADMIN') && phaseIdx + 1 === currentPhase && currentPhase < 6 && (
-          infoComplete
-            ? <button onClick={onCompletePhase} className={Btn.green}><CheckCircle2 size={13} className="mr-1" />Hoàn thành KH0{phaseIdx + 1}, chuyển KH{phaseIdx + 2 < 10 ? '0' : ''}{phaseIdx + 2}</button>
-            : <span className="flex items-center gap-1 text-[11px] text-amber-700"><Lock size={12} />Nhập đủ thông tin dự án SX để hoàn thành giai đoạn</span>
+          advanceBlockedMsg
+            ? <span className="flex items-center gap-1 text-[11px] text-amber-700"><Lock size={12} />{advanceBlockedMsg}</span>
+            : <button onClick={onCompletePhase} className={Btn.green}><CheckCircle2 size={13} className="mr-1" />Hoàn thành KH0{phaseIdx + 1}, chuyển KH0{phaseIdx + 2}</button>
         )}
       </div>
 
-      {/* Thông tin dự án sản xuất (GĐ Khối nhập) */}
+      {/* Thông tin dự án sản xuất — chỉ nhập ở KH02 */}
+      {phaseIdx !== 1 && (
+        <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">Thông tin dự án sản xuất được nhập ở <button onClick={() => setPhaseIdx(1)} className="text-blue-600 font-semibold hover:underline">KH02 — Khảo sát, lập kế hoạch dự án</button>.</p>
+      )}
+      {phaseIdx === 1 && (
       <div className="border border-gray-200 rounded">
         <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center justify-between">
-          <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Thông tin dự án sản xuất — KH0{phaseIdx + 1}</span>
+          <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Thông tin dự án sản xuất — KH02</span>
           {infoComplete
             ? <span className="flex items-center gap-1 text-[10px] font-bold text-green-700"><CheckCircle2 size={12} />Đã nhập đủ</span>
             : <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600"><Lock size={11} />Chưa đủ — chặn chuyển KH tiếp theo</span>}
@@ -677,6 +683,7 @@ const ProductionSheet: React.FC<{
           </div>
         </div>
       </div>
+      )}
 
       {/* Đầu việc triển khai của giai đoạn */}
       <div className="flex items-center justify-between">
