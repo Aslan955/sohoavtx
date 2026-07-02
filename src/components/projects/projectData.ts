@@ -16,14 +16,18 @@ export function makePhases(): ProjectStep[] {
   }));
 }
 
-// Chuẩn hóa: đảm bảo mỗi PAKD có đúng 6 phase KH01..KH06 (giữ dữ liệu bước cũ ở KH01, KH02...)
+// Mã giai đoạn: KH01, KH02, ... KH10...
+export const khCode = (i: number) => `KH${String(i + 1).padStart(2, '0')}`;
+
+// Chuẩn hóa: đảm bảo mỗi PAKD có tối thiểu 6 phase KH01..KH06 (giữ phase thêm & tên tự định nghĩa)
 export function normalizePhases(p: Pakd): Pakd {
+  const total = Math.max(6, p.steps.length);
   const steps: ProjectStep[] = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < total; i++) {
     const existing = p.steps[i];
     steps.push(existing
-      ? { ...existing, id: `KH0${i + 1}`, order: i + 1, name: PHASE_DEFAULT_NAMES[i] }
-      : { id: `KH0${i + 1}`, order: i + 1, name: PHASE_DEFAULT_NAMES[i], assignee: '', approvedBudget: 0, revenue: 0, costItems: [] });
+      ? { ...existing, id: khCode(i), order: i + 1, name: existing.name && !existing.name.startsWith('Chi phí ') ? existing.name : (PHASE_DEFAULT_NAMES[i] || existing.name) }
+      : { id: khCode(i), order: i + 1, name: PHASE_DEFAULT_NAMES[i] || `Giai đoạn ${i + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] });
   }
   // Di trú: đầu việc triển khai cấp PAKD (cũ) chuyển vào giai đoạn hiện tại
   if (p.productionTasks?.length && !steps.some(s => s.productionTasks?.length)) {

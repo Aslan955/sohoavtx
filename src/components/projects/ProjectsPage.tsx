@@ -8,7 +8,7 @@ import {
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
-  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, makePhases,
+  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, makePhases, khCode,
 } from './projectData';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -323,6 +323,9 @@ const DetailView: React.FC<{
   const prodEditable = afterAccounting;
 
   const updStep = (sid: string, patch: Partial<ProjectStep>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, ...patch } : s) }));
+  // Thêm / xóa giai đoạn (KH có thể định nghĩa và cộng thêm tùy dự án)
+  const addPhase = () => setPakd(p => ({ ...p, steps: [...p.steps, { id: khCode(p.steps.length), order: p.steps.length + 1, name: `Giai đoạn ${p.steps.length + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] }] }));
+  const rmPhase = (idx: number) => setPakd(p => p.steps.length <= 6 ? p : { ...p, steps: p.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, id: khCode(i), order: i + 1 })) });
   const addCost = (sid: string, it: Omit<CostItem, 'id'>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: [...s.costItems, { id: rid('CST'), ...it }] } : s) }));
   const updCost = (sid: string, cid: string, patch: Partial<CostItem>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.map(c => c.id === cid ? { ...c, ...patch } : c) } : s) }));
   const rmCost = (sid: string, cid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.filter(c => c.id !== cid) } : s) }));
@@ -468,32 +471,26 @@ const DetailView: React.FC<{
           </div>
 
           {sheet === 'BUSINESS' && (
-            <div className="p-4 space-y-3">
-              {/* KH01..KH06 sub-tabs với tích xanh cho giai đoạn đã qua */}
-              <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
-                {pakd.steps.map((s, i) => {
-                  const done = i + 1 < currentPhase;
-                  const isCurrent = i + 1 === currentPhase;
-                  return (
-                    <button key={s.id} onClick={() => setPhaseIdx(i)} title={s.name} className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${phaseIdx === i ? 'bg-[#007bff] text-white' : done ? 'text-green-700 hover:bg-green-50' : isCurrent ? 'text-blue-700 hover:bg-blue-50' : 'text-gray-600 hover:bg-gray-100'}`}>
-                      {done && <CheckCircle2 size={13} className={phaseIdx === i ? 'text-white' : 'text-green-600'} />}
-                      {isCurrent && <span className={`w-2 h-2 rounded-full ${phaseIdx === i ? 'bg-white' : 'bg-blue-500'} animate-pulse`} />}
-                      KH0{i + 1}
-                    </button>
-                  );
-                })}
+            <div className="p-4 space-y-4">
+              {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
+              <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
+                onUpd={updStep} onOpenDetail={(i) => setPhaseIdx(i)} phaseIdx={phaseIdx}
+                onAddPhase={addPhase} onRmPhase={rmPhase} />
+
+              {/* Chi tiết chi phí của giai đoạn đang chọn */}
+              <div className="border-t border-gray-200 pt-3 space-y-3">
+                <SectionTitle>Chi tiết chi phí — {khCode(phaseIdx)} ({pakd.steps[phaseIdx]?.name})</SectionTitle>
+                {actualEditable && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">✏️ Bạn đang là <b>Kế toán</b>: nhập ở cột <b>"Kế toán duyệt chi"</b> (ô vàng) cho từng khoản chi phí.</p>}
+                {adjusting && <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded px-3 py-1.5">📝 Đang ở <b>chế độ phiếu điều chỉnh</b> — bổ sung / đổi tên / xóa khoản chi phí; nhập số ở cột <b>V{costVersions + 1}</b>. Bấm "Xong điều chỉnh" khi hoàn tất.</p>}
+                {pakd.steps[phaseIdx] && (
+                  <PhaseSheet step={pakd.steps[phaseIdx]} phaseCode={khCode(phaseIdx)} editable={editable} costEditable={costEditable} actualEditable={actualEditable} showRevenue={phaseIdx === pakd.steps.length - 1}
+                    isCurrentPhase={phaseIdx + 1 === currentPhase} isDonePhase={phaseIdx + 1 < currentPhase} canSetPhase={simUser.role === 'SALE'} advanceBlockedMsg={advanceBlockedMsg} onSetCurrent={() => setCurrentPhase(phaseIdx + 1)} onCompletePhase={() => setCurrentPhase(Math.min(pakd.steps.length, phaseIdx + 2))}
+                    costVersions={costVersions} onAddVersion={addVersionColumn} canAddVersion={costEditable}
+                    onUpd={(patch) => updStep(pakd.steps[phaseIdx].id, patch)}
+                    onAddCost={(it) => addCost(pakd.steps[phaseIdx].id, it)} onUpdCost={(cid, p) => updCost(pakd.steps[phaseIdx].id, cid, p)} onRmCost={(cid) => rmCost(pakd.steps[phaseIdx].id, cid)}
+                    onAddProdCost={(it) => addProdCost(pakd.steps[phaseIdx].id, it)} onUpdProdCost={(cid, p) => updProdCost(pakd.steps[phaseIdx].id, cid, p)} onRmProdCost={(cid) => rmProdCost(pakd.steps[phaseIdx].id, cid)} />
+                )}
               </div>
-              <p className="text-[11px] text-gray-500">Giai đoạn hiện tại: <b className="text-blue-700">KH0{currentPhase} — {pakd.steps[currentPhase - 1]?.name}</b>. <CheckCircle2 size={11} className="inline text-green-600" /> = đã hoàn thành.</p>
-              {actualEditable && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">✏️ Bạn đang là <b>Kế toán</b>: nhập ở cột <b>"Kế toán duyệt chi"</b> (ô vàng) cho từng khoản chi phí.</p>}
-              {adjusting && <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded px-3 py-1.5">📝 Đang ở <b>chế độ phiếu điều chỉnh</b> — bổ sung / đổi tên / xóa khoản chi phí; nhập số ở cột <b>V{costVersions + 1}</b>. Bấm "Xong điều chỉnh" khi hoàn tất.</p>}
-              {pakd.steps[phaseIdx] && (
-                <PhaseSheet step={pakd.steps[phaseIdx]} phaseCode={`KH0${phaseIdx + 1}`} editable={editable} costEditable={costEditable} actualEditable={actualEditable} showRevenue={phaseIdx === 5}
-                  isCurrentPhase={phaseIdx + 1 === currentPhase} isDonePhase={phaseIdx + 1 < currentPhase} canSetPhase={simUser.role === 'SALE'} advanceBlockedMsg={advanceBlockedMsg} onSetCurrent={() => setCurrentPhase(phaseIdx + 1)} onCompletePhase={() => setCurrentPhase(Math.min(6, phaseIdx + 2))}
-                  costVersions={costVersions} onAddVersion={addVersionColumn} canAddVersion={costEditable}
-                  onUpd={(patch) => updStep(pakd.steps[phaseIdx].id, patch)}
-                  onAddCost={(it) => addCost(pakd.steps[phaseIdx].id, it)} onUpdCost={(cid, p) => updCost(pakd.steps[phaseIdx].id, cid, p)} onRmCost={(cid) => rmCost(pakd.steps[phaseIdx].id, cid)}
-                  onAddProdCost={(it) => addProdCost(pakd.steps[phaseIdx].id, it)} onUpdProdCost={(cid, p) => updProdCost(pakd.steps[phaseIdx].id, cid, p)} onRmProdCost={(cid) => rmProdCost(pakd.steps[phaseIdx].id, cid)} />
-              )}
             </div>
           )}
 
@@ -501,7 +498,7 @@ const DetailView: React.FC<{
             <ProductionSheet pakd={pakd} prodEditable={prodEditable} simRole={simUser.role} afterAccounting={afterAccounting}
               phaseIdx={phaseIdx} setPhaseIdx={setPhaseIdx} currentPhase={currentPhase}
               onUpdInfo={updProdInfo} onAdd={addTask} onUpd={updTask} onRm={rmTask}
-              advanceBlockedMsg={advanceBlockedMsg} onCompletePhase={() => setCurrentPhase(Math.min(6, currentPhase + 1))} />
+              advanceBlockedMsg={advanceBlockedMsg} onCompletePhase={() => setCurrentPhase(Math.min(pakd.steps.length, currentPhase + 1))} />
           )}
         </div>
       </div>
@@ -635,17 +632,17 @@ const ProductionSheet: React.FC<{
             <button key={s.id} onClick={() => setPhaseIdx(i)} title={s.name} className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${phaseIdx === i ? 'bg-[#007bff] text-white' : done ? 'text-green-700 hover:bg-green-50' : isCur ? 'text-blue-700 hover:bg-blue-50' : 'text-gray-600 hover:bg-gray-100'}`}>
               {done && <CheckCircle2 size={13} className={phaseIdx === i ? 'text-white' : 'text-green-600'} />}
               {isCur && <span className={`w-2 h-2 rounded-full ${phaseIdx === i ? 'bg-white' : 'bg-blue-500'} animate-pulse`} />}
-              KH0{i + 1}
+              {khCode(i)}
             </button>
           );
         })}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-gray-500">Giai đoạn: <b className="text-blue-700">KH0{phaseIdx + 1} — {step.name}</b>{phaseIdx + 1 < currentPhase && <span className="ml-2 text-green-700 font-semibold">✓ Đã hoàn thành</span>}{phaseIdx + 1 === currentPhase && <span className="ml-2 text-blue-700 font-semibold">● Đang thực hiện</span>}</p>
-        {(simRole === 'BUSINESS_DIRECTOR' || simRole === 'ADMIN') && phaseIdx + 1 === currentPhase && currentPhase < 6 && (
+        <p className="text-[11px] text-gray-500">Giai đoạn: <b className="text-blue-700">{khCode(phaseIdx)} — {step.name}</b>{phaseIdx + 1 < currentPhase && <span className="ml-2 text-green-700 font-semibold">✓ Đã hoàn thành</span>}{phaseIdx + 1 === currentPhase && <span className="ml-2 text-blue-700 font-semibold">● Đang thực hiện</span>}</p>
+        {(simRole === 'BUSINESS_DIRECTOR' || simRole === 'ADMIN') && phaseIdx + 1 === currentPhase && currentPhase < pakd.steps.length && (
           advanceBlockedMsg
             ? <span className="flex items-center gap-1 text-[11px] text-amber-700"><Lock size={12} />{advanceBlockedMsg}</span>
-            : <button onClick={onCompletePhase} className={Btn.green}><CheckCircle2 size={13} className="mr-1" />Hoàn thành KH0{phaseIdx + 1}, chuyển KH0{phaseIdx + 2}</button>
+            : <button onClick={onCompletePhase} className={Btn.green}><CheckCircle2 size={13} className="mr-1" />Hoàn thành {khCode(phaseIdx)}, chuyển {khCode(phaseIdx + 1)}</button>
         )}
       </div>
 
@@ -719,7 +716,7 @@ const ProductionSheet: React.FC<{
               </>)}
             </tr>
           ))}
-          {tasks.length === 0 && <tr><td colSpan={prodEditable ? 8 : 7} className="text-[11px] text-gray-400 italic px-3 py-4 text-center">Chưa có đầu việc trong KH0{phaseIdx + 1}.</td></tr>}
+          {tasks.length === 0 && <tr><td colSpan={prodEditable ? 8 : 7} className="text-[11px] text-gray-400 italic px-3 py-4 text-center">Chưa có đầu việc trong {khCode(phaseIdx)}.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -817,6 +814,104 @@ const AllocHeader: React.FC<{ roman: string; title: string; color: string; budge
     </div>
   </div>
 );
+
+// ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
+const PhaseTable: React.FC<{
+  pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number;
+  onUpd: (sid: string, patch: Partial<ProjectStep>) => void;
+  onOpenDetail: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onOpenDetail, onAddPhase, onRmPhase }) => {
+  const steps = pakd.steps;
+  const lastIdx = steps.length - 1;
+  const revenue = steps[lastIdx]?.revenue || 0;
+  const totSX = steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
+  const totKD = steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
+  const grand = totSX + totKD;
+  const inp = 'w-full border border-gray-200 rounded px-1.5 py-1 text-[11px] outline-none focus:border-blue-400';
+  const numInp = `${inp} text-right`;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <SectionTitle>Thông tin các giai đoạn ({steps.length}) — giai đoạn hiện tại: {khCode(currentPhase - 1)}</SectionTitle>
+        {editable && <button onClick={onAddPhase} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm giai đoạn ({khCode(steps.length)})</button>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse border border-gray-300">
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '130px' }}>Giai đoạn</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Bắt đầu</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Kết thúc</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '150px' }}>Mục tiêu</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '150px' }}>Kết quả đầu ra</th>
+              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách (đ)</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '120px' }}>Doanh thu dự kiến</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '85px' }}>% Chi phí/DT</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}></th>
+            </tr>
+            <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Kinh doanh</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '110px' }}>Tổng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {steps.map((s, i) => {
+              const rowTotal = (s.productionBudget || 0) + (s.businessBudget || 0);
+              const done = i + 1 < currentPhase; const isCur = i + 1 === currentPhase;
+              const isLast = i === lastIdx;
+              return (
+                <tr key={s.id} className={`border-b border-gray-200 ${phaseIdx === i ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}>
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      {done && <CheckCircle2 size={13} className="text-green-600 shrink-0" />}
+                      {isCur && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />}
+                      <span className="font-bold text-gray-800 shrink-0">{khCode(i)}</span>
+                    </div>
+                    {editable ? <input value={s.name} onChange={(e) => onUpd(s.id, { name: e.target.value })} className={`${inp} mt-1`} title="Định nghĩa tên giai đoạn" /> : <span className="text-gray-500 block">{s.name}</span>}
+                  </Td>
+                  <Td>{editable ? <input type="date" value={s.startDate || ''} onChange={(e) => onUpd(s.id, { startDate: e.target.value })} className={inp} /> : (s.startDate || '—')}</Td>
+                  <Td>{editable ? <input type="date" value={s.endDate || ''} onChange={(e) => onUpd(s.id, { endDate: e.target.value })} className={inp} /> : (s.endDate || '—')}</Td>
+                  <Td>{editable ? <textarea rows={1} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : (s.objective || '—')}</Td>
+                  <Td>{editable ? <textarea rows={1} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : (s.output || '—')}</Td>
+                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
+                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
+                  <Td right><b>{fmtFull(rowTotal)}</b></Td>
+                  <Td>{editable ? <input value={s.attachmentNote || ''} onChange={(e) => onUpd(s.id, { attachmentNote: e.target.value })} placeholder="Tên file / link" className={inp} /> : (s.attachmentNote || '—')}</Td>
+                  {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
+                  <Td right>{isLast
+                    ? (editable ? <input type="number" value={s.revenue || 0} onChange={(e) => onUpd(s.id, { revenue: Number(e.target.value) })} className={`${numInp} bg-yellow-100 border-yellow-400 font-bold`} /> : <b className="bg-yellow-100 px-1.5 py-0.5 rounded">{fmtFull(s.revenue || 0)}</b>)
+                    : <span className="text-gray-300">—</span>}</Td>
+                  <Td right>{isLast && revenue > 0 ? <b>{((rowTotal / revenue) * 100).toFixed(0)}%</b> : <span className="text-gray-300">—</span>}</Td>
+                  <Td center>
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => onOpenDetail(i)} title="Chi tiết chi phí giai đoạn" className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Eye size={13} /></button>
+                      {editable && i >= 6 && <button onClick={() => onRmPhase(i)} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+            {/* Tổng */}
+            <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+              <Td>Tổng</Td><Td></Td><Td></Td><Td></Td><Td></Td>
+              <Td right>{fmtFull(totSX)}</Td>
+              <Td right>{fmtFull(totKD)}</Td>
+              <Td right>{fmtFull(grand)}</Td>
+              <Td></Td>
+              <Td right>{revenue ? fmtFull(revenue) : '—'}</Td>
+              <Td right>{revenue > 0 ? <span className={grand / revenue > 1 ? 'text-red-600' : 'text-green-700'}>{((grand / revenue) * 100).toFixed(0)}%</span> : '—'}</Td>
+              <Td></Td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-gray-400">Bấm <Eye size={10} className="inline" /> để mở chi tiết chi phí của giai đoạn • Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Giai đoạn có thể định nghĩa lại tên và thêm mới ({khCode(steps.length)}...).</p>
+    </div>
+  );
+};
 
 const PhaseSheet: React.FC<{
   step: ProjectStep; phaseCode: string; editable: boolean; costEditable: boolean; actualEditable: boolean; showRevenue: boolean;
