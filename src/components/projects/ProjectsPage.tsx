@@ -1064,7 +1064,8 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Kết thúc</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Mục tiêu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Kết quả đầu ra</th>
-              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách (đ)</th>
+              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách phân bổ (đ)</th>
+              <th colSpan={2} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Chi thực tế tính đến hiện tại</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '120px' }}>Doanh thu dự kiến</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '85px' }}>% Chi phí/DT</th>
@@ -1074,6 +1075,8 @@ const PhaseTable: React.FC<{
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Kinh doanh</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '110px' }}>Tổng</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '115px' }}>Số tiền (đ)</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '85px' }}>% / NS</th>
             </tr>
           </thead>
           <tbody>
@@ -1081,6 +1084,12 @@ const PhaseTable: React.FC<{
               const rowTotal = (s.productionBudget || 0) + (s.businessBudget || 0);
               const done = i + 1 < currentPhase; const isCur = i + 1 === currentPhase;
               const isLast = i === lastIdx;
+              
+              const actBiz = s.costItems.reduce((sum, item) => sum + (item.actualAmount || 0), 0);
+              const actProd = (s.productionCostItems || []).reduce((sum, item) => sum + (item.actualAmount || 0), 0);
+              const rowActual = actBiz + actProd;
+              const rowActualPct = rowTotal > 0 ? (rowActual / rowTotal) * 100 : 0;
+
               return (
                 <tr key={s.id} className={`border-b border-gray-200 ${isCur ? 'bg-blue-50/70' : phaseIdx === i ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
                   <Td center>
@@ -1101,6 +1110,11 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
                   <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
+                  
+                  {/* Chi thực tế & % */}
+                  <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span></Td>
+                  <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
+
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
                   <Td right>{isLast
@@ -1125,6 +1139,18 @@ const PhaseTable: React.FC<{
               <Td right>{fmtFull(totSX)}</Td>
               <Td right>{fmtFull(totKD)}</Td>
               <Td right>{fmtFull(grand)}</Td>
+              {(() => {
+                const totActBiz = steps.reduce((sum, st) => sum + st.costItems.reduce((s, c) => s + (c.actualAmount || 0), 0), 0);
+                const totActProd = steps.reduce((sum, st) => sum + (st.productionCostItems || []).reduce((s, c) => s + (c.actualAmount || 0), 0), 0);
+                const grandActual = totActBiz + totActProd;
+                const grandActualPct = grand > 0 ? (grandActual / grand) * 100 : 0;
+                return (
+                  <>
+                    <Td right className="bg-amber-100/50 text-amber-900">{fmtFull(grandActual)}</Td>
+                    <Td right className="bg-amber-100/50 text-amber-900">{grand > 0 ? `${grandActualPct.toFixed(0)}%` : '—'}</Td>
+                  </>
+                );
+              })()}
               <Td></Td>
               <Td right>{revenue ? fmtFull(revenue) : '—'}</Td>
               <Td right>{revenue > 0 ? <span className={grand / revenue > 1 ? 'text-red-600' : 'text-green-700'}>{((grand / revenue) * 100).toFixed(0)}%</span> : '—'}</Td>
@@ -1155,12 +1181,21 @@ const PhaseSheet: React.FC<{
   const bizPct = totalBudget > 0 ? (bizBudget / totalBudget) * 100 : 0;
   const prodPct = totalBudget > 0 ? (prodBudget / totalBudget) * 100 : 0;
 
+  const bizActual = step.costItems.reduce((s, c) => s + (c.actualAmount || 0), 0);
+  const prodActual = (step.productionCostItems || []).reduce((s, c) => s + (c.actualAmount || 0), 0);
+  const totalActual = bizActual + prodActual;
+  const actualPct = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
+
   return (
     <div className="border border-gray-200 rounded">
       <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-wrap">
         <span className="w-8 h-5 rounded bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">{phaseCode}</span>
         {editable ? <input value={step.name} onChange={(e) => onUpd({ name: e.target.value })} className="flex-1 min-w-[200px] text-xs font-bold bg-transparent outline-none border-b border-transparent focus:border-blue-400" /> : <span className="flex-1 min-w-[200px] text-xs font-bold text-gray-800">{step.name}</span>}
-        <span className="text-[11px] text-gray-600 shrink-0">Tổng phân bổ: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b> <span className="text-gray-400">(KD {bizPct.toFixed(0)}% • SX {prodPct.toFixed(0)}%)</span></span>
+        <span className="text-[11px] text-gray-600 shrink-0">
+          Tổng phân bổ: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b> <span className="text-gray-400">(KD {bizPct.toFixed(0)}% • SX {prodPct.toFixed(0)}%)</span>
+          <span className="text-gray-300 mx-1.5">|</span>
+          Chi thực tế: <b className={`${totalActual > totalBudget && totalBudget > 0 ? 'text-red-600 font-bold' : 'text-amber-700'} text-xs`}>{fmtFull(totalActual)}</b> <span className={`${totalActual > totalBudget && totalBudget > 0 ? 'text-red-600 font-bold' : 'text-amber-800 font-semibold'}`}>({totalBudget > 0 ? `${actualPct.toFixed(0)}%` : '—'})</span>
+        </span>
         {canAddVersion && <button onClick={onAddVersion} className="ml-auto flex items-center gap-1 text-[11px] text-blue-600 hover:underline"><Plus size={12} />Thêm lần điều chỉnh (V{costVersions + 2})</button>}
       </div>
 
