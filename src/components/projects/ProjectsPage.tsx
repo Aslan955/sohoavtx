@@ -315,7 +315,7 @@ const DetailView: React.FC<{
   const [sheet, setSheet] = useState<'BUSINESS' | 'PRODUCTION'>('BUSINESS');
   const [phaseIdx, setPhaseIdx] = useState(0); // KH01..KH06
   const [histIdx, setHistIdx] = useState<number | null>(null); // xem lịch sử ĐC ngân sách của giai đoạn
-  const [showComments, setShowComments] = useState(true);
+  const [showComments, setShowComments] = useState(false);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
   const currentPhase = pakd.currentPhase || 1;
@@ -965,8 +965,8 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '130px' }}>Giai đoạn</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Bắt đầu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '105px' }}>Kết thúc</th>
-              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '150px' }}>Mục tiêu</th>
-              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '150px' }}>Kết quả đầu ra</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Mục tiêu</th>
+              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Kết quả đầu ra</th>
               <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách (đ)</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '120px' }}>Doanh thu dự kiến</th>
@@ -996,8 +996,8 @@ const PhaseTable: React.FC<{
                   </Td>
                   <Td>{editable ? <input type="date" value={s.startDate || ''} onChange={(e) => onUpd(s.id, { startDate: e.target.value })} className={inp} /> : (s.startDate || '—')}</Td>
                   <Td>{editable ? <input type="date" value={s.endDate || ''} onChange={(e) => onUpd(s.id, { endDate: e.target.value })} className={inp} /> : (s.endDate || '—')}</Td>
-                  <Td>{editable ? <textarea rows={1} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : (s.objective || '—')}</Td>
-                  <Td>{editable ? <textarea rows={1} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : (s.output || '—')}</Td>
+                  <Td>{editable ? <textarea rows={3} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : <span className="whitespace-pre-wrap">{s.objective || '—'}</span>}</Td>
+                  <Td>{editable ? <textarea rows={3} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : <span className="whitespace-pre-wrap">{s.output || '—'}</span>}</Td>
                   <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
                   <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>

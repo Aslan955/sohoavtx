@@ -16,7 +16,9 @@
       "Bash(curl -s -o /dev/null -w \"port3001:%{http_code}\\\\n\" http://localhost:3001)",
       "Bash(pkill -f \"vite\")",
       "PowerShell($c = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if\\($c\\){ $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed $_\" } } else { \"none\" })",
-      "Bash(rm test_flow.mjs)"
+      "Bash(rm test_flow.mjs)",
+      "Bash(cd \"/c/Users/namnv/.claude/projects/C--Users-namnv-Downloads-Sroucer-code-imis-management-system/memory\" && [ -f MEMORY.md ] && cat MEMORY.md || echo \"no index\")",
+      "Bash(grep -n \"objective:\\\\|output: e.target.value }\\)} className={\\\\`\\\\${inp} resize-y\\\\`}\" src/components/projects/ProjectsPage.tsx)"
     ]
   }
 }
