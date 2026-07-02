@@ -58,6 +58,12 @@ export const COST_TYPES = [
 ];
 
 export const DOMAINS = ['GOV', 'Giải pháp dịch vụ', 'Healthcare', 'BFSI', 'Telco', 'Enterprise', 'Education', 'Khác'];
+export const BUSINESS_DIRECTORS = [
+  'Nguyễn Tiến Dũng (GĐ Khối GPDN)',
+  'Trần Quốc Bảo (GĐ Khối Hạ tầng)',
+  'Lê Hoàng Sơn (GĐ Khối Viễn thông)',
+  'Phạm Thu Hà (GĐ Khối Y tế số)',
+];
 export const BIDDING_METHODS = ['Đấu thầu rộng rãi', 'Chào hàng cạnh tranh', 'Chỉ định thầu', 'Đấu thầu hạn chế'];
 export const FIELD_TYPES = ['Hàng hóa CNTT', 'Dịch vụ phi tư vấn', 'Dịch vụ tư vấn', 'Xây lắp hạ tầng CNTT', 'Hỗn hợp'];
 export const CONTRACT_TYPES = ['Trọn gói', 'Theo đơn giá điều chỉnh', 'Theo đơn giá cố định'];
