@@ -368,6 +368,30 @@ const SAMPLE_NAMES = [
 ];
 const SAMPLE_STATUSES: Pakd['status'][] = ['DRAFT', 'PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD', 'COMPLETED'];
 
+// Dữ liệu mẫu cho 6 giai đoạn KH01..KH06 (theo % giá trị hợp đồng)
+const PHASE_SAMPLE = [
+  { obj: 'Tiếp cận & xác định cơ hội kinh doanh', out: 'Biên bản đánh giá cơ hội, phê duyệt theo đuổi', bizPct: 0.05, prodPct: 0.00, s: '2026-08-01', e: '2026-08-31' },
+  { obj: 'Khảo sát hiện trạng & lập kế hoạch dự án', out: 'Tài liệu khảo sát, thiết kế sơ bộ & PAKD', bizPct: 0.08, prodPct: 0.05, s: '2026-09-01', e: '2026-09-30' },
+  { obj: 'Chuẩn bị & nộp hồ sơ dự thầu', out: 'Bộ hồ sơ dự thầu hoàn chỉnh', bizPct: 0.06, prodPct: 0.04, s: '2026-10-01', e: '2026-10-31' },
+  { obj: 'Tổ chức mở thầu, thương thảo', out: 'Thông báo trúng thầu', bizPct: 0.04, prodPct: 0.03, s: '2026-11-01', e: '2026-11-30' },
+  { obj: 'Ký kết hợp đồng', out: 'Hợp đồng đã ký', bizPct: 0.03, prodPct: 0.02, s: '2026-12-01', e: '2026-12-31' },
+  { obj: 'Triển khai, nghiệm thu & kiểm toán', out: 'Biên bản nghiệm thu, hồ sơ quyết toán', bizPct: 0.05, prodPct: 0.35, s: '2027-01-01', e: '2027-02-28' },
+];
+function makeSteps(revenue: number): ProjectStep[] {
+  return PHASE_SAMPLE.map((ph, idx) => {
+    const biz = Math.round(revenue * ph.bizPct);
+    const prod = Math.round(revenue * ph.prodPct);
+    return {
+      id: `KH0${idx + 1}`, order: idx + 1, name: PHASE_DEFAULT_NAMES[idx], assignee: '',
+      startDate: ph.s, endDate: ph.e, objective: ph.obj, output: ph.out,
+      approvedBudget: biz + prod, businessBudget: biz, productionBudget: prod,
+      revenue: idx === PHASE_SAMPLE.length - 1 ? revenue : 0,
+      costItems: biz > 0 ? [{ id: `C${idx}1`, name: 'Chi phí kinh doanh giai đoạn', costType: 'Chi phí quản lý dự án', amount: biz }] : [],
+      productionCostItems: prod > 0 ? [{ id: `PC${idx}1`, name: 'Chi phí sản xuất giai đoạn', costType: 'Nhân công triển khai', amount: prod }] : [],
+    };
+  });
+}
+
 let sampleSeq = 200;
 function makeSample(status: Pakd['status'], i: number): Pakd {
   const c = CUSTOMERS[(i + status.length) % CUSTOMERS.length];
@@ -391,7 +415,7 @@ function makeSample(status: Pakd['status'], i: number): Pakd {
     expectedContractValue: revenue, expectedCost: Math.round(revenue * 0.6),
     tender: { packageCode: `TBMT-26.${1000 + seq}`, investor: c.name, biddingMethod: BIDDING_METHODS[i % BIDDING_METHODS.length], fieldType: FIELD_TYPES[i % FIELD_TYPES.length], contractType: CONTRACT_TYPES[i % CONTRACT_TYPES.length], packagePrice: Math.round(revenue * 1.05), bidSecurity: Math.round(revenue * 0.015), closeDate: '2026-07-15' },
     revenue,
-    steps: [],
+    steps: makeSteps(revenue),
     ...(hasCode ? { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2`, locked: true } : { locked: false }),
     ...(status === 'COMPLETED' ? { jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}` } : {}),
     outsourceCodes: [], productionTasks: [], costVersions: 0, version: 1,
