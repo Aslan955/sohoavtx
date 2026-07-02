@@ -58,7 +58,7 @@ export interface ProjectStep {
   productionTasks?: ProductionTask[]; // đầu việc triển khai của giai đoạn (Khối SX nhập)
 }
 
-export type ApprovalAction = 'APPROVE' | 'REJECT';
+export type ApprovalAction = 'APPROVE' | 'REJECT' | 'REQUEST_REVISION';
 
 export interface ApprovalRecord {
   id: string;

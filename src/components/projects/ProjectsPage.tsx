@@ -129,7 +129,8 @@ export const ProjectsPage: React.FC = () => {
           onAddOutsource={(label) => runAction(current.id, (p, l) => openOutsourceCode(p, label, simUser.fullName, l))}
           onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))}
           onCreateBudgetAdj={(sid, after, reason) => runAction(current.id, (p, l) => createBudgetAdjustment(p, sid, after, reason, simUser.fullName, l))}
-          onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))} />
+          onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))}
+          onDecide={(action, comment) => runAction(current.id, (p, l) => approvePakd(p, simUser.role, action, comment, simUser.fullName, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -304,7 +305,10 @@ const DetailView: React.FC<{
   onAddOutsource: (label: string) => void; onAddComment: (content: string) => void;
   onCreateBudgetAdj: (stepId: string, after: { business: number; production: number }, reason: string) => void;
   onDecideBudgetAdj: (stepId: string, adjId: string, action: ApprovalAction, comment: string) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj }) => {
+  onDecide: (action: ApprovalAction, comment: string) => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide }) => {
+  const [decision, setDecision] = useState('');
+  const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role;
   const editable = canEditDirect(pakd, simUser.role);
   const actualEditable = simUser.role === 'ACCOUNTANT' || simUser.role === 'ADMIN'; // Kế toán nhập chi phí thực tế
   const total = pakdTotalCost(pakd);
@@ -365,6 +369,22 @@ const DetailView: React.FC<{
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
         </div>
       </div>
+
+      {/* Thanh phê duyệt khi tới lượt vai trò hiện tại */}
+      {isMyTurn && (
+        <div className="border border-amber-300 bg-amber-50 rounded p-3 flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="text-xs font-semibold text-amber-800 shrink-0 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            Hồ sơ đang chờ <b>{ROLE_LABEL[simUser.role]}</b> ({simUser.fullName}) xử lý
+          </div>
+          <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Ý kiến / lý do (tùy chọn)..." className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => { onDecide('APPROVE', decision); setDecision(''); }} className={Btn.green}><Check size={13} className="mr-1" />Duyệt</button>
+            <button onClick={() => { onDecide('REQUEST_REVISION', decision); setDecision(''); }} className="flex items-center px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded hover:bg-amber-600"><FileEdit size={13} className="mr-1" />Cần bổ sung</button>
+            <button onClick={() => { onDecide('REJECT', decision); setDecision(''); }} className={Btn.red}><Ban size={13} className="mr-1" />Từ chối</button>
+          </div>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 gap-4 items-start ${showComments ? 'lg:grid-cols-[1fr_330px]' : ''}`}>
       <div className="space-y-4 min-w-0">

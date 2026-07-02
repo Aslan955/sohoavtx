@@ -99,10 +99,11 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction, 
   };
   let updated: Pakd = { ...pakd, approvalHistory: [record, ...pakd.approvalHistory] };
 
-  if (action === 'REJECT') {
+  if (action === 'REJECT' || action === 'REQUEST_REVISION') {
     updated.status = 'RETURNED';
     record.newStatus = 'RETURNED';
-    pushAudit(log, updated, actor, role, `Trả lại (${stepLabel})`, old, 'RETURNED', record.comment);
+    const label = action === 'REJECT' ? 'Từ chối' : 'Yêu cầu bổ sung thông tin';
+    pushAudit(log, updated, actor, role, `${label} (${stepLabel})`, old, 'RETURNED', record.comment);
     return { pakd: updated };
   }
 
