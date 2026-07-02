@@ -865,7 +865,7 @@ const AttachCell: React.FC<{ step: ProjectStep; editable: boolean; onUpd: (patch
   );
 };
 
-// ===================== Modal lịch sử & điều chỉnh ngân sách (duyệt GĐ Khối → Kế toán → BOD) =====================
+// ===================== Modal lịch sử & điều chỉnh ngân sách (duyệt GĐ Khối → BOD) =====================
 const BADiff: React.FC<{ before: number; after: number }> = ({ before, after }) => (
   <span>{fmtFull(before)} → <b className={after > before ? 'text-red-600' : after < before ? 'text-green-600' : ''}>{fmtFull(after)}</b></span>
 );
@@ -883,7 +883,7 @@ const BudgetHistoryModal: React.FC<{
   const [reason, setReason] = useState('');
   const [comment, setComment] = useState('');
   const inp = 'w-full text-xs border border-gray-300 rounded px-2 py-1.5 text-right outline-none focus:border-blue-400';
-  const canCreate = simUser.role === 'SALE' && locked && !list.some(a => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'].includes(a.status));
+  const canCreate = (simUser.role === 'SALE' || simUser.role === 'BUSINESS_DIRECTOR') && locked && !list.some(a => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'].includes(a.status));
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -894,7 +894,7 @@ const BudgetHistoryModal: React.FC<{
         </div>
         <div className="p-4 space-y-3">
           <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-3 py-2">
-            Ngân sách hiện tại: KD <b>{fmtFull(curBiz)}</b> • SX <b>{fmtFull(curProd)}</b> • Tổng <b className="text-blue-700">{fmtFull(curBiz + curProd)}</b>. Luồng duyệt: <b>GĐ Khối → Kế toán → BOD</b>.
+            Ngân sách hiện tại: KD <b>{fmtFull(curBiz)}</b> • SX <b>{fmtFull(curProd)}</b> • Tổng <b className="text-blue-700">{fmtFull(curBiz + curProd)}</b>. Luồng duyệt: <b>GĐ Khối → BOD</b>.
           </div>
 
           {canCreate && !creating && <button onClick={() => { setNb(curBiz); setNp(curProd); setCreating(true); }} className={Btn.primary}><Plus size={13} className="mr-1" />Tạo phiếu điều chỉnh ngân sách</button>}
@@ -950,7 +950,7 @@ const BudgetHistoryModal: React.FC<{
               })}
             </div>
           )}
-          <p className="text-[10px] text-gray-400">Mỗi lần điều chỉnh ngân sách hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → Kế toán → BOD</b> mới được áp dụng.</p>
+          <p className="text-[10px] text-gray-400">AM / Giám đốc khối muốn đổi ngân sách phải tạo đề xuất; hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → BOD</b> mới được áp dụng.</p>
         </div>
       </div>
     </div>

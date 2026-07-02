@@ -208,20 +208,17 @@ export function approveChangeRequest(pakd: Pakd, crId: string, role: UserRole, a
   return { pakd: updatedPakd };
 }
 
-// ===================== Điều chỉnh ngân sách theo giai đoạn (GĐ Khối → Kế toán → BOD) =====================
+// ===================== Điều chỉnh ngân sách theo giai đoạn (GĐ Khối → BOD) =====================
 export const BA_PENDING_ROLE: Record<string, UserRole> = {
   PENDING_BUSINESS_DIRECTOR: 'BUSINESS_DIRECTOR',
-  PENDING_ACCOUNTANT: 'ACCOUNTANT',
   PENDING_BOD: 'BOD',
 };
 export const BA_NEXT: Record<string, string> = {
-  PENDING_BUSINESS_DIRECTOR: 'PENDING_ACCOUNTANT',
-  PENDING_ACCOUNTANT: 'PENDING_BOD',
+  PENDING_BUSINESS_DIRECTOR: 'PENDING_BOD',
   PENDING_BOD: 'APPROVED',
 };
 export const BA_STATUS_LABEL: Record<string, string> = {
   PENDING_BUSINESS_DIRECTOR: 'Chờ GĐ Khối duyệt',
-  PENDING_ACCOUNTANT: 'Chờ Kế toán duyệt',
   PENDING_BOD: 'Chờ BOD duyệt',
   APPROVED: 'Đã duyệt (đã áp dụng)',
   REJECTED: 'Từ chối',
