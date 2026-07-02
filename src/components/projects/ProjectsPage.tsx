@@ -4,7 +4,7 @@ import {
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, PakdComment,
+  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -331,11 +331,17 @@ const DetailView: React.FC<{
   const updProdCost = (sid: string, cid: string, patch: Partial<CostItem>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionCostItems: (s.productionCostItems || []).map(c => c.id === cid ? { ...c, ...patch } : c) } : s) }));
   const rmProdCost = (sid: string, cid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionCostItems: (s.productionCostItems || []).filter(c => c.id !== cid) } : s) }));
 
-  // production tasks (Khối sản xuất)
+  // production theo giai đoạn (Khối sản xuất + GĐ Khối)
   const stamp = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
-  const addTask = () => setPakd(p => ({ ...p, productionTasks: [...p.productionTasks, { id: rid('PT'), name: 'Đầu việc mới', assignee: '', progress: 0, updatedAt: stamp() }] }));
-  const updTask = (tid: string, patch: Partial<ProductionTask>) => setPakd(p => ({ ...p, productionTasks: p.productionTasks.map(t => t.id === tid ? { ...t, ...patch, updatedAt: stamp() } : t) }));
-  const rmTask = (tid: string) => setPakd(p => ({ ...p, productionTasks: p.productionTasks.filter(t => t.id !== tid) }));
+  const addTask = (sid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: [...(s.productionTasks || []), { id: rid('PT'), name: 'Đầu việc mới', assignee: '', progress: 0, updatedAt: stamp() }] } : s) }));
+  const updTask = (sid: string, tid: string, patch: Partial<ProductionTask>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).map(t => t.id === tid ? { ...t, ...patch, updatedAt: stamp() } : t) } : s) }));
+  const rmTask = (sid: string, tid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).filter(t => t.id !== tid) } : s) }));
+  const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
+
+  // Điều kiện chuyển KH tiếp theo: GĐ Khối đã nhập đủ thông tin dự án sản xuất của KH hiện tại
+  const curStep = pakd.steps[currentPhase - 1];
+  const prodInfoComplete = !!(curStep?.productionInfo?.projectManager && curStep?.productionInfo?.startDate && curStep?.productionInfo?.endDate);
+  const advanceBlockedMsg = prodInfoComplete ? '' : `GĐ Khối chưa nhập đủ Thông tin dự án sản xuất của KH0${currentPhase} (PM, ngày bắt đầu/kết thúc) — chưa thể chuyển giai đoạn.`;
 
   return (
     <div className="space-y-4">
@@ -479,7 +485,7 @@ const DetailView: React.FC<{
               {adjusting && <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded px-3 py-1.5">📝 Đang ở <b>chế độ phiếu điều chỉnh</b> — bổ sung / đổi tên / xóa khoản chi phí; nhập số ở cột <b>V{costVersions + 1}</b>. Bấm "Xong điều chỉnh" khi hoàn tất.</p>}
               {pakd.steps[phaseIdx] && (
                 <PhaseSheet step={pakd.steps[phaseIdx]} phaseCode={`KH0${phaseIdx + 1}`} editable={editable} costEditable={costEditable} actualEditable={actualEditable} showRevenue={phaseIdx === 5}
-                  isCurrentPhase={phaseIdx + 1 === currentPhase} isDonePhase={phaseIdx + 1 < currentPhase} canSetPhase={simUser.role === 'SALE'} onSetCurrent={() => setCurrentPhase(phaseIdx + 1)} onCompletePhase={() => setCurrentPhase(Math.min(6, phaseIdx + 2))}
+                  isCurrentPhase={phaseIdx + 1 === currentPhase} isDonePhase={phaseIdx + 1 < currentPhase} canSetPhase={simUser.role === 'SALE'} advanceBlockedMsg={advanceBlockedMsg} onSetCurrent={() => setCurrentPhase(phaseIdx + 1)} onCompletePhase={() => setCurrentPhase(Math.min(6, phaseIdx + 2))}
                   costVersions={costVersions} onAddVersion={addVersionColumn} canAddVersion={costEditable}
                   onUpd={(patch) => updStep(pakd.steps[phaseIdx].id, patch)}
                   onAddCost={(it) => addCost(pakd.steps[phaseIdx].id, it)} onUpdCost={(cid, p) => updCost(pakd.steps[phaseIdx].id, cid, p)} onRmCost={(cid) => rmCost(pakd.steps[phaseIdx].id, cid)}
@@ -490,7 +496,8 @@ const DetailView: React.FC<{
 
           {sheet === 'PRODUCTION' && (
             <ProductionSheet pakd={pakd} prodEditable={prodEditable} simRole={simUser.role} afterAccounting={afterAccounting}
-              onAdd={addTask} onUpd={updTask} onRm={rmTask} />
+              phaseIdx={phaseIdx} setPhaseIdx={setPhaseIdx} currentPhase={currentPhase}
+              onUpdInfo={updProdInfo} onAdd={addTask} onUpd={updTask} onRm={rmTask} />
           )}
         </div>
       </div>
@@ -584,20 +591,90 @@ const SheetTab: React.FC<{ label: string; active: boolean; onClick: () => void }
   <button onClick={onClick} className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${active ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
 );
 
+const PROD_INFO_FIELDS: { key: keyof ProductionInfo; label: string; type?: string; options?: string[]; required?: boolean }[] = [
+  { key: 'workOrder', label: 'Work order' },
+  { key: 'projectType', label: 'Project Type', options: ['Internal', 'External'] },
+  { key: 'priority', label: 'Priority', options: ['High', 'Medium', 'Low'] },
+  { key: 'size', label: 'Size', options: ['Small', 'Medium', 'Large'] },
+  { key: 'department', label: 'Department' },
+  { key: 'projectManager', label: 'Project Manager', required: true },
+  { key: 'domain', label: 'Domain', options: ['GOV', 'BFSI', 'Telco', 'Enterprise', 'Khác'] },
+  { key: 'customer', label: 'Customer' },
+  { key: 'startDate', label: 'Start Date', type: 'date', required: true },
+  { key: 'endDate', label: 'End Date', type: 'date', required: true },
+  { key: 'status', label: 'Status', options: ['OPEN', 'RUNNING', 'CLOSED'] },
+];
+
 const ProductionSheet: React.FC<{
   pakd: Pakd; prodEditable: boolean; simRole: string; afterAccounting: boolean;
-  onAdd: () => void; onUpd: (tid: string, patch: Partial<ProductionTask>) => void; onRm: (tid: string) => void;
-}> = ({ pakd, prodEditable, simRole, afterAccounting, onAdd, onUpd, onRm }) => {
-  const tasks = pakd.productionTasks;
+  phaseIdx: number; setPhaseIdx: (i: number) => void; currentPhase: number;
+  onUpdInfo: (sid: string, patch: Partial<ProductionInfo>) => void;
+  onAdd: (sid: string) => void; onUpd: (sid: string, tid: string, patch: Partial<ProductionTask>) => void; onRm: (sid: string, tid: string) => void;
+}> = ({ pakd, prodEditable, simRole, afterAccounting, phaseIdx, setPhaseIdx, currentPhase, onUpdInfo, onAdd, onUpd, onRm }) => {
+  const step = pakd.steps[phaseIdx];
+  const tasks = step?.productionTasks || [];
+  const info = step?.productionInfo || {};
   const avg = tasks.length ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / tasks.length) : 0;
+  const infoEditable = simRole === 'BUSINESS_DIRECTOR' || simRole === 'ADMIN'; // GĐ Khối nhập thông tin dự án SX
+  const infoComplete = !!(info.projectManager && info.startDate && info.endDate);
+  const inp = 'w-full text-[11px] border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-blue-400';
+
+  if (!step) return null;
   return (
     <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <SectionTitle>Giai đoạn triển khai — Khối Sản xuất ({tasks.length}) • Tiến độ TB {avg}%</SectionTitle>
-        {prodEditable && <button onClick={onAdd} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm đầu việc</button>}
+      {/* KH tabs — chạy theo giai đoạn giống bên Kinh doanh */}
+      <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
+        {pakd.steps.map((s, i) => {
+          const done = i + 1 < currentPhase;
+          const isCur = i + 1 === currentPhase;
+          return (
+            <button key={s.id} onClick={() => setPhaseIdx(i)} title={s.name} className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${phaseIdx === i ? 'bg-[#007bff] text-white' : done ? 'text-green-700 hover:bg-green-50' : isCur ? 'text-blue-700 hover:bg-blue-50' : 'text-gray-600 hover:bg-gray-100'}`}>
+              {done && <CheckCircle2 size={13} className={phaseIdx === i ? 'text-white' : 'text-green-600'} />}
+              {isCur && <span className={`w-2 h-2 rounded-full ${phaseIdx === i ? 'bg-white' : 'bg-blue-500'} animate-pulse`} />}
+              KH0{i + 1}
+            </button>
+          );
+        })}
       </div>
-      {!afterAccounting && <p className="text-[11px] text-amber-600 italic">⏳ Chưa mở triển khai. Khối Sản xuất chỉ lập giai đoạn triển khai sau khi <b>Kế toán duyệt</b> (PAKD chuyển sang "Chờ IT").</p>}
-      {afterAccounting && <p className="text-[11px] text-gray-400 italic">Khối Sản xuất nhập các giai đoạn triển khai: đầu việc, thời gian bắt đầu/kết thúc, tiến độ hoàn thành.</p>}
+      <p className="text-[11px] text-gray-500">Giai đoạn: <b className="text-blue-700">KH0{phaseIdx + 1} — {step.name}</b></p>
+
+      {/* Thông tin dự án sản xuất (GĐ Khối nhập) */}
+      <div className="border border-gray-200 rounded">
+        <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+          <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Thông tin dự án sản xuất — KH0{phaseIdx + 1}</span>
+          {infoComplete
+            ? <span className="flex items-center gap-1 text-[10px] font-bold text-green-700"><CheckCircle2 size={12} />Đã nhập đủ</span>
+            : <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600"><Lock size={11} />Chưa đủ — chặn chuyển KH tiếp theo</span>}
+        </div>
+        <div className="p-3 space-y-3">
+          {infoEditable
+            ? <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">✏️ Bạn là <b>GĐ Khối</b>: nhập thông tin dự án sản xuất. Bắt buộc: <b>Project Manager, Start/End Date</b> — nhập đủ mới cho chuyển sang KH tiếp theo.</p>
+            : <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-1.5">Thông tin do <b>Giám đốc Khối</b> nhập (đăng nhập tài khoản <b>gdkhoi</b> để chỉnh sửa).</p>}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase">Project code (Mã sản xuất)</label>
+              <p className="text-[11px] font-bold font-mono text-blue-700">{pakd.productionCode || 'Chưa cấp mã'}</p>
+            </div>
+            {PROD_INFO_FIELDS.map(f => (
+              <div key={f.key} className="space-y-1">
+                <label className="text-[10px] font-semibold text-gray-400 uppercase">{f.label}{f.required && ' *'}</label>
+                {infoEditable ? (
+                  f.options
+                    ? <select value={(info[f.key] as string) || ''} onChange={(e) => onUpdInfo(step.id, { [f.key]: e.target.value })} className={inp}><option value="">-- Chọn --</option>{f.options.map(o => <option key={o}>{o}</option>)}</select>
+                    : <input type={f.type || 'text'} value={(info[f.key] as string) || ''} onChange={(e) => onUpdInfo(step.id, { [f.key]: e.target.value })} className={inp} />
+                ) : <p className="text-[11px] font-medium text-gray-700">{(info[f.key] as string) || '—'}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Đầu việc triển khai của giai đoạn */}
+      <div className="flex items-center justify-between">
+        <SectionTitle>Đầu việc triển khai — Khối Sản xuất ({tasks.length}) • Tiến độ TB {avg}%</SectionTitle>
+        {prodEditable && <button onClick={() => onAdd(step.id)} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm đầu việc</button>}
+      </div>
+      {!afterAccounting && <p className="text-[11px] text-amber-600 italic">⏳ Chưa mở triển khai. Khối Sản xuất chỉ lập đầu việc sau khi <b>Kế toán duyệt</b> (PAKD chuyển sang "Chờ IT").</p>}
 
       <table className="w-full text-[11px] border-collapse border border-gray-200 rounded">
         <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
@@ -609,13 +686,13 @@ const ProductionSheet: React.FC<{
             <tr key={t.id} className="border-b border-gray-100">
               <Td center muted>{i + 1}</Td>
               {prodEditable ? (<>
-                <Td><input value={t.name} onChange={(e) => onUpd(t.id, { name: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
-                <Td><input value={t.assignee || ''} onChange={(e) => onUpd(t.id, { assignee: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
-                <Td><input type="date" value={t.startDate || ''} onChange={(e) => onUpd(t.id, { startDate: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
-                <Td><input type="date" value={t.endDate || ''} onChange={(e) => onUpd(t.id, { endDate: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
-                <Td><div className="flex items-center gap-2"><input type="number" min={0} max={100} value={t.progress} onChange={(e) => onUpd(t.id, { progress: Math.max(0, Math.min(100, Number(e.target.value))) })} className="w-16 border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /><ProgressBar v={t.progress} /></div></Td>
+                <Td><input value={t.name} onChange={(e) => onUpd(step.id, t.id, { name: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
+                <Td><input value={t.assignee || ''} onChange={(e) => onUpd(step.id, t.id, { assignee: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
+                <Td><input type="date" value={t.startDate || ''} onChange={(e) => onUpd(step.id, t.id, { startDate: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
+                <Td><input type="date" value={t.endDate || ''} onChange={(e) => onUpd(step.id, t.id, { endDate: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
+                <Td><div className="flex items-center gap-2"><input type="number" min={0} max={100} value={t.progress} onChange={(e) => onUpd(step.id, t.id, { progress: Math.max(0, Math.min(100, Number(e.target.value))) })} className="w-16 border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /><ProgressBar v={t.progress} /></div></Td>
                 <Td muted mono>{t.updatedAt || '—'}</Td>
-                <Td center><button onClick={() => onRm(t.id)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button></Td>
+                <Td center><button onClick={() => onRm(step.id, t.id)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button></Td>
               </>) : (<>
                 <Td><span className="font-medium text-gray-800">{t.name}</span></Td>
                 <Td>{t.assignee || '—'}</Td>
@@ -626,7 +703,7 @@ const ProductionSheet: React.FC<{
               </>)}
             </tr>
           ))}
-          {tasks.length === 0 && <tr><td colSpan={prodEditable ? 8 : 7} className="text-[11px] text-gray-400 italic px-3 py-4 text-center">Chưa có giai đoạn triển khai nào.</td></tr>}
+          {tasks.length === 0 && <tr><td colSpan={prodEditable ? 8 : 7} className="text-[11px] text-gray-400 italic px-3 py-4 text-center">Chưa có đầu việc trong KH0{phaseIdx + 1}.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -727,12 +804,12 @@ const AllocHeader: React.FC<{ roman: string; title: string; color: string; budge
 
 const PhaseSheet: React.FC<{
   step: ProjectStep; phaseCode: string; editable: boolean; costEditable: boolean; actualEditable: boolean; showRevenue: boolean;
-  isCurrentPhase: boolean; isDonePhase: boolean; canSetPhase: boolean; onSetCurrent: () => void; onCompletePhase: () => void;
+  isCurrentPhase: boolean; isDonePhase: boolean; canSetPhase: boolean; advanceBlockedMsg?: string; onSetCurrent: () => void; onCompletePhase: () => void;
   costVersions: number; onAddVersion: () => void; canAddVersion: boolean;
   onUpd: (patch: Partial<ProjectStep>) => void;
   onAddCost: (it: Omit<CostItem, 'id'>) => void; onUpdCost: (cid: string, patch: Partial<CostItem>) => void; onRmCost: (cid: string) => void;
   onAddProdCost: (it: Omit<CostItem, 'id'>) => void; onUpdProdCost: (cid: string, patch: Partial<CostItem>) => void; onRmProdCost: (cid: string) => void;
-}> = ({ step, phaseCode, editable, costEditable, actualEditable, showRevenue, isCurrentPhase, isDonePhase, canSetPhase, onSetCurrent, onCompletePhase, costVersions, onAddVersion, canAddVersion, onUpd, onAddCost, onUpdCost, onRmCost, onAddProdCost, onUpdProdCost, onRmProdCost }) => {
+}> = ({ step, phaseCode, editable, costEditable, actualEditable, showRevenue, isCurrentPhase, isDonePhase, canSetPhase, advanceBlockedMsg, onSetCurrent, onCompletePhase, costVersions, onAddVersion, canAddVersion, onUpd, onAddCost, onUpdCost, onRmCost, onAddProdCost, onUpdProdCost, onRmProdCost }) => {
   const bizPlanned = stepCost(step);
   const prodItems = step.productionCostItems || [];
   const prodPlanned = prodItems.reduce((s, c) => s + c.amount, 0);
@@ -761,7 +838,9 @@ const PhaseSheet: React.FC<{
         {canSetPhase && (
           <div className="flex items-center gap-2">
             {!isCurrentPhase && !isDonePhase && <button onClick={onSetCurrent} className="text-blue-600 hover:underline font-semibold">Đặt là giai đoạn hiện tại</button>}
-            {isCurrentPhase && <button onClick={onCompletePhase} className="flex items-center gap-1 text-green-700 hover:underline font-semibold"><CheckCircle2 size={13} />Hoàn thành, chuyển giai đoạn sau</button>}
+            {isCurrentPhase && (advanceBlockedMsg
+              ? <span className="flex items-center gap-1 text-amber-700" title={advanceBlockedMsg}><Lock size={12} />{advanceBlockedMsg}</span>
+              : <button onClick={onCompletePhase} className="flex items-center gap-1 text-green-700 hover:underline font-semibold"><CheckCircle2 size={13} />Hoàn thành, chuyển giai đoạn sau</button>)}
           </div>
         )}
       </div>

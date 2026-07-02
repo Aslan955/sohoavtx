@@ -25,7 +25,12 @@ export function normalizePhases(p: Pakd): Pakd {
       ? { ...existing, id: `KH0${i + 1}`, order: i + 1, name: PHASE_DEFAULT_NAMES[i] }
       : { id: `KH0${i + 1}`, order: i + 1, name: PHASE_DEFAULT_NAMES[i], assignee: '', approvedBudget: 0, revenue: 0, costItems: [] });
   }
-  return { ...p, steps };
+  // Di trú: đầu việc triển khai cấp PAKD (cũ) chuyển vào giai đoạn hiện tại
+  if (p.productionTasks?.length && !steps.some(s => s.productionTasks?.length)) {
+    const idx = Math.min(5, Math.max(0, (p.currentPhase || 1) - 1));
+    steps[idx] = { ...steps[idx], productionTasks: p.productionTasks };
+  }
+  return { ...p, steps, productionTasks: [] };
 }
 
 export const SYSTEM_USERS: SystemUser[] = [
@@ -96,6 +101,7 @@ const RAW_PAKDS: Pakd[] = [
       {
         id: 'S1', order: 1, name: 'Chi phí Kinh doanh', assignee: 'Lê Thu Trang (Sale)', startDate: '2026-05-10', endDate: '2026-06-30', note: 'Chi phí phát triển cơ hội, làm hồ sơ thầu và bán hàng',
         approvedBudget: 4500000000, revenue: 15000000000, businessBudget: 5000000000, productionBudget: 1000000000,
+        productionInfo: { workOrder: 'WO-2026-045', projectType: 'External', priority: 'High', size: 'Large', department: 'SX - Telco', projectManager: 'V00914 - Trần Minh Quang', domain: 'GOV', customer: 'Viettel', startDate: '2026-06-01', endDate: '2026-07-15', status: 'CLOSED' },
         costItems: [
           { id: 'C1', name: 'Chi phí đội bán hàng & tư vấn giải pháp', costType: 'Nhân công triển khai', amount: 1800000000, versionAmounts: [2000000000], actualAmount: 1900000000 },
           { id: 'C2', name: 'Chi phí lập hồ sơ thầu & bảo lãnh dự thầu', costType: 'Chi phí quản lý dự án', amount: 700000000, versionAmounts: [750000000], actualAmount: 700000000 },
@@ -106,6 +112,7 @@ const RAW_PAKDS: Pakd[] = [
       {
         id: 'S2', order: 2, name: 'Chi phí Sản xuất', assignee: 'Trần Minh Quang (PM)', startDate: '2026-07-01', endDate: '2027-02-28', note: 'Chi phí phát triển, triển khai và bảo hành phần mềm',
         approvedBudget: 18200000000, revenue: 30000000000, businessBudget: 4000000000, productionBudget: 15000000000,
+        productionInfo: { workOrder: 'WO-2026-052', projectType: 'External', priority: 'High', size: 'Large', department: 'SX - Telco', projectManager: 'V00914 - Trần Minh Quang', domain: 'GOV', customer: 'Viettel', startDate: '2026-07-16', endDate: '2026-10-30', status: 'RUNNING' },
         costItems: [
           { id: 'C5', name: 'Nhân công phát triển phần mềm', costType: 'Nhân công triển khai', amount: 9000000000, versionAmounts: [9500000000], actualAmount: 9600000000 },
           { id: 'C6', name: 'Bản quyền phần mềm & công cụ phát triển', costType: 'Bản quyền phần mềm', amount: 3500000000, versionAmounts: [3500000000], actualAmount: 3500000000 },

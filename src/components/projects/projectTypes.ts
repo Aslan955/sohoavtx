@@ -49,6 +49,8 @@ export interface ProjectStep {
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh
   productionCostItems?: CostItem[]; // các khoản chi phí Sản xuất
+  productionInfo?: ProductionInfo; // thông tin dự án sản xuất của giai đoạn (GĐ Khối nhập)
+  productionTasks?: ProductionTask[]; // đầu việc triển khai của giai đoạn (Khối SX nhập)
 }
 
 export type ApprovalAction = 'APPROVE' | 'REJECT';
@@ -164,6 +166,22 @@ export interface ProductionTask {
   endDate?: string;
   progress: number; // tiến độ hoàn thành %
   updatedAt?: string; // ngày cập nhật dữ liệu gần nhất
+}
+
+// Thông tin dự án sản xuất theo từng giai đoạn KH — GĐ Khối nhập
+// (mã dự án lấy tự động từ productionCode đã sinh, không nhập tay)
+export interface ProductionInfo {
+  workOrder?: string;
+  projectType?: string; // Internal / External...
+  priority?: string; // High / Medium / Low
+  size?: string; // Small / Medium / Large
+  department?: string;
+  projectManager?: string;
+  domain?: string; // GOV / BFSI...
+  customer?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string; // OPEN / RUNNING / CLOSED
 }
 
 export interface OutsourceCode {
