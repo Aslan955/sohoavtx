@@ -132,7 +132,9 @@ export interface Pakd {
   createdAt: string;
   status: PakdStatus;
   // Thông tin cơ hội (Sale nhập khi khởi tạo)
-  pmName?: string; // Người quản lý dự án
+  pmName?: string; // Người quản lý dự án (nhập ở giai đoạn sản xuất)
+  businessDirector?: string; // Giám đốc khối
+  domain?: string; // Lĩnh vực: GOV / Giải pháp dịch vụ / Healthcare...
   projStart?: string; // Thời gian bắt đầu
   projEnd?: string; // Thời gian kết thúc
   expectedContractValue?: number; // Giá trị hợp đồng dự kiến

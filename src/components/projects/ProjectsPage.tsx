@@ -8,7 +8,7 @@ import {
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
-  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, makePhases,
+  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, makePhases,
 } from './projectData';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -439,7 +439,8 @@ const DetailView: React.FC<{
             <dl className="text-[11px] divide-y divide-gray-100">
               <DRow label="Khách hàng" value={pakd.customerName} />
               <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
-              <DRow label="Người quản lý dự án (PM)" value={pakd.pmName || '—'} />
+              <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
+              <DRow label="Domain" value={pakd.domain || '—'} />
               <DRow label="Người lập (Sale)" value={pakd.creator} />
               <DRow label="Thời gian thực hiện" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
               {pakd.tender.packageCode && <DRow label="Số hiệu gói thầu (TBMT)" value={pakd.tender.packageCode} mono />}
@@ -996,19 +997,19 @@ const AuditView: React.FC<{ log: AuditLogEntry[] }> = ({ log }) => (
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', pmName: '',
+    name: '', customerName: '', customerCode: '', businessDirector: '', domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.name.trim() || !f.customerName.trim() || !f.pmName.trim()) { setErr('Cần nhập Tên cơ hội, Tên khách hàng và Người quản lý dự án.'); return; }
+    if (!f.name.trim() || !f.customerName.trim() || !f.businessDirector.trim()) { setErr('Cần nhập Tên cơ hội, Tên khách hàng và Giám đốc khối.'); return; }
     if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
     onCreate({
       id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
       customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      pmName: f.pmName, projStart: f.projStart, projEnd: f.projEnd,
+      businessDirector: f.businessDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
       tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
@@ -1028,7 +1029,8 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="col-span-2 space-y-1"><label className={lab}>Tên cơ hội / dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Tên khách hàng *</label><input value={f.customerName} onChange={(e) => setF({ ...f, customerName: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Người quản lý dự án (PM) *</label><input value={f.pmName} onChange={(e) => setF({ ...f, pmName: e.target.value })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><input value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Người lập (Sale)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
