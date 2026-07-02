@@ -358,4 +358,52 @@ const RAW_PAKDS: Pakd[] = [
   },
 ];
 
-export const INITIAL_PAKDS: Pakd[] = RAW_PAKDS.map(normalizePhases);
+// ===== Sinh thêm data mẫu để mỗi bước có đủ 5 hồ sơ =====
+const SAMPLE_NAMES = [
+  'Hệ thống Quản lý văn bản điện tử', 'Nền tảng tích hợp dữ liệu dùng chung', 'Trung tâm điều hành thông minh IOC',
+  'Cổng dịch vụ công trực tuyến', 'Hệ thống Camera an ninh AI', 'Hạ tầng điện toán đám mây',
+  'Phần mềm quản lý bệnh viện HIS', 'Hệ thống Core Banking', 'Nền tảng học trực tuyến LMS',
+  'Hệ thống ERP doanh nghiệp', 'Mạng WAN nội bộ', 'Trung tâm dữ liệu Data Center',
+  'Hệ thống giám sát môi trường', 'Ứng dụng công dân số', 'Nền tảng bản đồ số GIS',
+];
+const SAMPLE_STATUSES: Pakd['status'][] = ['DRAFT', 'PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD', 'COMPLETED'];
+
+let sampleSeq = 200;
+function makeSample(status: Pakd['status'], i: number): Pakd {
+  const c = CUSTOMERS[(i + status.length) % CUSTOMERS.length];
+  const seq = ++sampleSeq;
+  const master = `022.${seq}`;
+  const hasCode = ['PENDING_ACCOUNTANT', 'PENDING_BOD', 'COMPLETED'].includes(status);
+  const revenue = (5 + i * 4) * 1_000_000_000;
+  const name = SAMPLE_NAMES[(sampleSeq) % SAMPLE_NAMES.length];
+  const key = c.code.replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
+  return {
+    id: `PAKD-${seq}`,
+    name: `${name}`,
+    customerName: c.name, customerCode: c.code,
+    creator: 'Lê Thu Trang',
+    createdAt: `2026-06-${String((i % 27) + 1).padStart(2, '0')} 09:00`,
+    status,
+    businessDirector: BUSINESS_DIRECTORS[i % BUSINESS_DIRECTORS.length],
+    salesDirector: SALES_DIRECTORS[i % SALES_DIRECTORS.length],
+    domain: DOMAINS[i % DOMAINS.length],
+    projStart: '2026-08-01', projEnd: '2027-02-28',
+    expectedContractValue: revenue, expectedCost: Math.round(revenue * 0.6),
+    tender: { packageCode: `TBMT-26.${1000 + seq}`, investor: c.name, biddingMethod: BIDDING_METHODS[i % BIDDING_METHODS.length], fieldType: FIELD_TYPES[i % FIELD_TYPES.length], contractType: CONTRACT_TYPES[i % CONTRACT_TYPES.length], packagePrice: Math.round(revenue * 1.05), bidSecurity: Math.round(revenue * 0.015), closeDate: '2026-07-15' },
+    revenue,
+    steps: [],
+    ...(hasCode ? { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2`, locked: true } : { locked: false }),
+    ...(status === 'COMPLETED' ? { jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}` } : {}),
+    outsourceCodes: [], productionTasks: [], costVersions: 0, version: 1,
+    approvalHistory: [], changeRequests: [], versionHistory: [],
+    currentPhase: hasCode ? 2 : 1,
+  };
+}
+
+const generated: Pakd[] = [];
+for (const st of SAMPLE_STATUSES) {
+  const have = RAW_PAKDS.filter(p => p.status === st).length;
+  for (let i = have; i < 5; i++) generated.push(makeSample(st, i));
+}
+
+export const INITIAL_PAKDS: Pakd[] = [...RAW_PAKDS, ...generated].map(normalizePhases);
