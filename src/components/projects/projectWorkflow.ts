@@ -1,7 +1,7 @@
 // State machine cho PAKD động + phiếu điều chỉnh chi phí. Không phụ thuộc UI.
 import {
   Pakd, PakdStatus, UserRole, ApprovalAction, ApprovalRecord, AuditLogEntry,
-  ChangeRequest, ChangeRequestStatus, CostChange, ProjectStep, pakdTotalCost,
+  ChangeRequest, ChangeRequestStatus, CostChange, ProjectStep, BudgetAdjustment, BudgetAdjStatus, pakdTotalCost,
 } from './projectTypes';
 
 const nowStr = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -204,6 +204,58 @@ export function approveChangeRequest(pakd: Pakd, crId: string, role: UserRole, a
   return { pakd: updatedPakd };
 }
 
+// ===================== Điều chỉnh ngân sách theo giai đoạn (GĐ Khối → Kế toán → BOD) =====================
+export const BA_PENDING_ROLE: Record<string, UserRole> = {
+  PENDING_BUSINESS_DIRECTOR: 'BUSINESS_DIRECTOR',
+  PENDING_ACCOUNTANT: 'ACCOUNTANT',
+  PENDING_BOD: 'BOD',
+};
+export const BA_NEXT: Record<string, string> = {
+  PENDING_BUSINESS_DIRECTOR: 'PENDING_ACCOUNTANT',
+  PENDING_ACCOUNTANT: 'PENDING_BOD',
+  PENDING_BOD: 'APPROVED',
+};
+export const BA_STATUS_LABEL: Record<string, string> = {
+  PENDING_BUSINESS_DIRECTOR: 'Chờ GĐ Khối duyệt',
+  PENDING_ACCOUNTANT: 'Chờ Kế toán duyệt',
+  PENDING_BOD: 'Chờ BOD duyệt',
+  APPROVED: 'Đã duyệt (đã áp dụng)',
+  REJECTED: 'Từ chối',
+};
+
+export function createBudgetAdjustment(pakd: Pakd, stepId: string, after: { business: number; production: number }, reason: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  const step = pakd.steps.find(s => s.id === stepId);
+  if (!step) return { pakd, error: 'Không tìm thấy giai đoạn.' };
+  if (!reason.trim()) return { pakd, error: 'Nhập lý do điều chỉnh ngân sách.' };
+  const before = { business: step.businessBudget || 0, production: step.productionBudget || 0 };
+  if (before.business === after.business && before.production === after.production) return { pakd, error: 'Ngân sách mới không thay đổi so với hiện tại.' };
+  if ((step.budgetAdjustments || []).some(a => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'].includes(a.status)))
+    return { pakd, error: 'Giai đoạn đang có phiếu điều chỉnh ngân sách chờ duyệt.' };
+  const adj = { id: rid('BA'), createdAt: nowStr(), requestedBy: actor, reason, before, after, status: 'PENDING_BUSINESS_DIRECTOR' as const, approvals: [] };
+  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, budgetAdjustments: [adj, ...(s.budgetAdjustments || [])] } : s) };
+  pushAudit(log, updated, actor, 'SALE', 'Tạo phiếu điều chỉnh ngân sách', undefined, undefined, `[${step.name}] ${fmt(before.business + before.production)} → ${fmt(after.business + after.production)}. Lý do: ${reason}`);
+  return { pakd: updated };
+}
+
+export function decideBudgetAdjustment(pakd: Pakd, stepId: string, adjId: string, role: UserRole, action: ApprovalAction, comment: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  const step = pakd.steps.find(s => s.id === stepId);
+  const adj = step?.budgetAdjustments?.find(a => a.id === adjId);
+  if (!step || !adj) return { pakd, error: 'Không tìm thấy phiếu điều chỉnh.' };
+  if (BA_PENDING_ROLE[adj.status] !== role) return { pakd, error: 'Bạn không có quyền duyệt phiếu ở bước này.' };
+  const newStatus = action === 'REJECT' ? 'REJECTED' : BA_NEXT[adj.status];
+  const newAdj = { ...adj, status: newStatus as any, approvals: [...adj.approvals, { role, actor, action, at: nowStr(), comment }] };
+  let updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, budgetAdjustments: (s.budgetAdjustments || []).map(a => a.id === adjId ? newAdj : a) } : s) };
+  if (newStatus === 'APPROVED') {
+    updated = { ...updated, steps: updated.steps.map(s => s.id === stepId ? { ...s, businessBudget: adj.after.business, productionBudget: adj.after.production } : s) };
+    pushAudit(log, updated, actor, role, 'Áp dụng điều chỉnh ngân sách', undefined, undefined, `[${step.name}] ${fmt(adj.before.business + adj.before.production)} → ${fmt(adj.after.business + adj.after.production)}`);
+  } else {
+    pushAudit(log, updated, actor, role, action === 'REJECT' ? 'Từ chối phiếu điều chỉnh ngân sách' : `Duyệt phiếu điều chỉnh ngân sách (${BA_STATUS_LABEL[adj.status]})`, undefined, undefined, `[${step.name}] ${comment || ''}`);
+  }
+  return { pakd: updated };
+}
+
+const fmt = (v: number) => v.toLocaleString('vi-VN') + ' đ';
+
 // Mở mã outsource — mã con của mã sản xuất (chỉ khi đã có mã sản xuất, không trùng).
 export function openOutsourceCode(pakd: Pakd, label: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
   if (!pakd.productionCode) return { pakd, error: 'Chưa có mã sản xuất để mở mã outsource.' };
@@ -220,3 +272,4 @@ export function openOutsourceCode(pakd: Pakd, label: string, actor: string, log:
 export function hasOpenChangeRequest(pakd: Pakd): boolean {
   return pakd.changeRequests.some(c => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_BOD', 'PENDING_ACCOUNTANT'].includes(c.status));
 }
+

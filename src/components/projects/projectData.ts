@@ -118,9 +118,12 @@ const RAW_PAKDS: Pakd[] = [
       {
         id: 'S1', order: 1, name: 'Chi phí Kinh doanh', assignee: 'Lê Thu Trang (Sale)', startDate: '2026-05-10', endDate: '2026-06-30', note: 'Chi phí phát triển cơ hội, làm hồ sơ thầu và bán hàng',
         approvedBudget: 4500000000, revenue: 15000000000, businessBudget: 5000000000, productionBudget: 1000000000,
-        budgetHistory: [
-          { at: '2026-05-14 09:00', by: 'Nguyễn Tiến Dũng', business: 5000000000, production: 1000000000, note: 'Điều chỉnh tăng NS kinh doanh' },
-          { at: '2026-05-11 10:30', by: 'Lê Thu Trang', business: 4000000000, production: 1000000000, note: 'Lập lần đầu' },
+        budgetAdjustments: [
+          { id: 'BA-001', createdAt: '2026-05-13 15:00', requestedBy: 'Lê Thu Trang', reason: 'Tăng NS kinh doanh để mở rộng tiếp thị', before: { business: 4000000000, production: 1000000000 }, after: { business: 5000000000, production: 1000000000 }, status: 'APPROVED', approvals: [
+            { role: 'BUSINESS_DIRECTOR', actor: 'Nguyễn Tiến Dũng', action: 'APPROVE', at: '2026-05-13 16:00' },
+            { role: 'ACCOUNTANT', actor: 'Lê Thị Mai', action: 'APPROVE', at: '2026-05-14 09:00' },
+            { role: 'BOD', actor: 'Phạm Minh Hải', action: 'APPROVE', at: '2026-05-14 11:00' },
+          ] },
         ],
         productionInfo: { workOrder: 'WO-2026-045', projectType: 'External', priority: 'High', size: 'Large', department: 'SX - Telco', projectManager: 'V00914 - Trần Minh Quang', domain: 'GOV', customer: 'Viettel', startDate: '2026-06-01', endDate: '2026-07-15', status: 'CLOSED' },
         costItems: [

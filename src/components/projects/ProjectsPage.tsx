@@ -14,6 +14,7 @@ import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
   openOutsourceCode, hasOpenChangeRequest, rid,
+  createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
@@ -126,7 +127,9 @@ export const ProjectsPage: React.FC = () => {
           onSubmit={() => runAction(current.id, (p, l) => submitPakd(p, simUser.fullName, l))}
           onCreateCR={(reason, changes) => runAction(current.id, (p) => createChangeRequest(p, reason, changes, simUser.fullName))}
           onAddOutsource={(label) => runAction(current.id, (p, l) => openOutsourceCode(p, label, simUser.fullName, l))}
-          onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))} />
+          onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))}
+          onCreateBudgetAdj={(sid, after, reason) => runAction(current.id, (p, l) => createBudgetAdjustment(p, sid, after, reason, simUser.fullName, l))}
+          onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -299,7 +302,9 @@ const DetailView: React.FC<{
   pakd: Pakd; simUser: any; onBack: () => void; setPakd: (fn: (p: Pakd) => Pakd) => void;
   onSubmit: () => void; onCreateCR: (reason: string, changes: CostChange[]) => void;
   onAddOutsource: (label: string) => void; onAddComment: (content: string) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment }) => {
+  onCreateBudgetAdj: (stepId: string, after: { business: number; production: number }, reason: string) => void;
+  onDecideBudgetAdj: (stepId: string, adjId: string, action: ApprovalAction, comment: string) => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj }) => {
   const editable = canEditDirect(pakd, simUser.role);
   const actualEditable = simUser.role === 'ACCOUNTANT' || simUser.role === 'ADMIN'; // Kế toán nhập chi phí thực tế
   const total = pakdTotalCost(pakd);
@@ -324,15 +329,6 @@ const DetailView: React.FC<{
   const prodEditable = afterAccounting;
 
   const updStep = (sid: string, patch: Partial<ProjectStep>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, ...patch } : s) }));
-  // Ghi lịch sử điều chỉnh ngân sách của giai đoạn (gọi khi rời ô nhập)
-  const logBudget = (sid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => {
-    if (s.id !== sid) return s;
-    const hist = s.budgetHistory || [];
-    const b = s.businessBudget || 0, pr = s.productionBudget || 0;
-    const last = hist[0];
-    if (last && last.business === b && last.production === pr) return s;
-    return { ...s, budgetHistory: [{ at: new Date().toISOString().replace('T', ' ').substring(0, 16), by: simUser.fullName, business: b, production: pr }, ...hist] };
-  }) }));
   // Thêm / xóa giai đoạn (KH có thể định nghĩa và cộng thêm tùy dự án)
   const addPhase = () => setPakd(p => ({ ...p, steps: [...p.steps, { id: khCode(p.steps.length), order: p.steps.length + 1, name: `Giai đoạn ${p.steps.length + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] }] }));
   const rmPhase = (idx: number) => setPakd(p => p.steps.length <= 6 ? p : { ...p, steps: p.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, id: khCode(i), order: i + 1 })) });
@@ -485,7 +481,7 @@ const DetailView: React.FC<{
             <div className="p-4 space-y-4">
               {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
-                onUpd={updStep} onLogBudget={logBudget} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                onUpd={updStep} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
             </div>
           )}
@@ -542,7 +538,11 @@ const DetailView: React.FC<{
       </div>
 
       {crOpen && <ChangeRequestModal pakd={pakd} onClose={() => setCrOpen(false)} onSubmit={(r, c) => { onCreateCR(r, c); setCrOpen(false); }} />}
-      {histIdx !== null && pakd.steps[histIdx] && <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} onClose={() => setHistIdx(null)} />}
+      {histIdx !== null && pakd.steps[histIdx] && (
+        <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} simUser={simUser} locked={pakd.locked} onClose={() => setHistIdx(null)}
+          onCreate={(after, reason) => onCreateBudgetAdj(pakd.steps[histIdx].id, after, reason)}
+          onDecide={(adjId, action, comment) => onDecideBudgetAdj(pakd.steps[histIdx].id, adjId, action, comment)} />
+      )}
     </div>
   );
 };
@@ -845,46 +845,92 @@ const AttachCell: React.FC<{ step: ProjectStep; editable: boolean; onUpd: (patch
   );
 };
 
-// ===================== Modal lịch sử điều chỉnh ngân sách của giai đoạn =====================
-const BudgetHistoryModal: React.FC<{ step: ProjectStep; phaseCode: string; onClose: () => void }> = ({ step, phaseCode, onClose }) => {
-  const hist = step.budgetHistory || [];
+// ===================== Modal lịch sử & điều chỉnh ngân sách (duyệt GĐ Khối → Kế toán → BOD) =====================
+const BADiff: React.FC<{ before: number; after: number }> = ({ before, after }) => (
+  <span>{fmtFull(before)} → <b className={after > before ? 'text-red-600' : after < before ? 'text-green-600' : ''}>{fmtFull(after)}</b></span>
+);
+
+const BudgetHistoryModal: React.FC<{
+  step: ProjectStep; phaseCode: string; simUser: any; locked: boolean; onClose: () => void;
+  onCreate: (after: { business: number; production: number }, reason: string) => void;
+  onDecide: (adjId: string, action: ApprovalAction, comment: string) => void;
+}> = ({ step, phaseCode, simUser, locked, onClose, onCreate, onDecide }) => {
+  const list = step.budgetAdjustments || [];
+  const curBiz = step.businessBudget || 0, curProd = step.productionBudget || 0;
+  const [creating, setCreating] = useState(false);
+  const [nb, setNb] = useState(curBiz);
+  const [np, setNp] = useState(curProd);
+  const [reason, setReason] = useState('');
+  const [comment, setComment] = useState('');
+  const inp = 'w-full text-xs border border-gray-300 rounded px-2 py-1.5 text-right outline-none focus:border-blue-400';
+  const canCreate = simUser.role === 'SALE' && locked && !list.some(a => ['PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'].includes(a.status));
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded shadow-lg w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
-          <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2"><History size={15} className="text-blue-600" />Lịch sử điều chỉnh ngân sách — {phaseCode} ({step.name})</h3>
+          <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2"><History size={15} className="text-blue-600" />Điều chỉnh ngân sách — {phaseCode} ({step.name})</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-        <div className="p-4">
-          {hist.length === 0 ? (
-            <p className="text-xs text-gray-400 italic text-center py-8">Chưa có điều chỉnh ngân sách nào cho giai đoạn này.</p>
-          ) : (
-            <table className="w-full text-[11px] border-collapse border border-gray-200">
-              <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-                <Th w="34px" center>Lần</Th><Th w="130px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th>
-                <Th w="110px" right>NS Kinh doanh</Th><Th w="110px" right>NS Sản xuất</Th><Th w="110px" right>Tổng</Th><Th w="120px" right>Chênh lệch tổng</Th>
-              </tr></thead>
-              <tbody>
-                {hist.map((h, i) => {
-                  const tot = h.business + h.production;
-                  const prev = hist[i + 1]; // bản cũ hơn
-                  const diff = prev ? tot - (prev.business + prev.production) : 0;
-                  return (
-                    <tr key={i} className="border-b border-gray-100">
-                      <Td center muted>{hist.length - i}</Td>
-                      <Td mono>{h.at}</Td>
-                      <Td>{h.by}</Td>
-                      <Td right>{fmtFull(h.business)}</Td>
-                      <Td right>{fmtFull(h.production)}</Td>
-                      <Td right><b>{fmtFull(tot)}</b></Td>
-                      <Td right>{prev ? <span className={diff > 0 ? 'text-red-600 font-semibold' : diff < 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}>{diff > 0 ? '+' : ''}{fmtFull(diff)}</span> : <span className="text-gray-300">— (lần đầu)</span>}</Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="p-4 space-y-3">
+          <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+            Ngân sách hiện tại: KD <b>{fmtFull(curBiz)}</b> • SX <b>{fmtFull(curProd)}</b> • Tổng <b className="text-blue-700">{fmtFull(curBiz + curProd)}</b>. Luồng duyệt: <b>GĐ Khối → Kế toán → BOD</b>.
+          </div>
+
+          {canCreate && !creating && <button onClick={() => { setNb(curBiz); setNp(curProd); setCreating(true); }} className={Btn.primary}><Plus size={13} className="mr-1" />Tạo phiếu điều chỉnh ngân sách</button>}
+          {creating && (
+            <div className="border border-purple-200 bg-purple-50/40 rounded p-3 space-y-2">
+              <p className="text-[11px] font-bold text-purple-700 uppercase">Phiếu điều chỉnh mới (cũ → mới)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><label className="text-[10px] font-semibold text-gray-500">NS Kinh doanh mới</label><input type="number" value={nb} onChange={(e) => setNb(Number(e.target.value))} className={inp} /><p className="text-[10px] text-gray-400 text-right">cũ: {fmtFull(curBiz)}</p></div>
+                <div className="space-y-1"><label className="text-[10px] font-semibold text-gray-500">NS Sản xuất mới</label><input type="number" value={np} onChange={(e) => setNp(Number(e.target.value))} className={inp} /><p className="text-[10px] text-gray-400 text-right">cũ: {fmtFull(curProd)}</p></div>
+              </div>
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Lý do điều chỉnh..." className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400" />
+              <div className="flex gap-2">
+                <button onClick={() => { onCreate({ business: nb, production: np }, reason); setCreating(false); setReason(''); }} className={Btn.purple}>Nộp phiếu (→ GĐ Khối)</button>
+                <button onClick={() => setCreating(false)} className={Btn.ghost}>Hủy</button>
+              </div>
+            </div>
           )}
-          <p className="text-[10px] text-gray-400 mt-3">Mỗi lần thay đổi mức phân bổ NS Kinh doanh / Sản xuất của giai đoạn sẽ được ghi lại tại đây.</p>
+
+          {list.length === 0 ? (
+            <p className="text-xs text-gray-400 italic text-center py-6">Chưa có phiếu điều chỉnh ngân sách nào.</p>
+          ) : (
+            <div className="space-y-2">
+              {list.map((a, i) => {
+                const canDecide = BA_PENDING_ROLE[a.status] === simUser.role;
+                return (
+                  <div key={a.id} className="border border-gray-200 rounded">
+                    <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center justify-between text-[11px]">
+                      <span className="font-semibold">Lần {list.length - i} • {a.createdAt} • {a.requestedBy}</span>
+                      <span className={`font-bold px-2 py-0.5 rounded ${a.status === 'APPROVED' ? 'bg-green-100 text-green-700' : a.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{BA_STATUS_LABEL[a.status]}</span>
+                    </div>
+                    <div className="p-3 text-[11px] space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>NS Kinh doanh: <BADiff before={a.before.business} after={a.after.business} /></div>
+                        <div>NS Sản xuất: <BADiff before={a.before.production} after={a.after.production} /></div>
+                        <div>Tổng: <BADiff before={a.before.business + a.before.production} after={a.after.business + a.after.production} /></div>
+                      </div>
+                      <p className="text-gray-500 italic">Lý do: {a.reason}</p>
+                      {a.approvals.length > 0 && (
+                        <div className="text-gray-500 space-y-0.5">
+                          {a.approvals.map((ap, k) => <div key={k}>• {ap.at} — <b>{ap.actor}</b> ({ROLE_LABEL[ap.role]}): <span className={ap.action === 'APPROVE' ? 'text-green-600' : 'text-red-600'}>{ap.action === 'APPROVE' ? 'Duyệt' : 'Từ chối'}</span>{ap.comment ? ` — ${ap.comment}` : ''}</div>)}
+                        </div>
+                      )}
+                      {canDecide && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Ý kiến..." className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
+                          <button onClick={() => { onDecide(a.id, 'APPROVE', comment); setComment(''); }} className={Btn.green}><Check size={12} className="mr-1" />Duyệt</button>
+                          <button onClick={() => { onDecide(a.id, 'REJECT', comment); setComment(''); }} className={Btn.red}><Ban size={12} className="mr-1" />Từ chối</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400">Mỗi lần điều chỉnh ngân sách hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → Kế toán → BOD</b> mới được áp dụng.</p>
         </div>
       </div>
     </div>
@@ -895,8 +941,8 @@ const BudgetHistoryModal: React.FC<{ step: ProjectStep; phaseCode: string; onClo
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number;
   onUpd: (sid: string, patch: Partial<ProjectStep>) => void;
-  onLogBudget: (sid: string) => void; onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onLogBudget, onShowHistory, onAddPhase, onRmPhase }) => {
+  onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onShowHistory, onAddPhase, onRmPhase }) => {
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
   const revenue = steps[lastIdx]?.revenue || 0;
@@ -952,8 +998,8 @@ const PhaseTable: React.FC<{
                   <Td>{editable ? <input type="date" value={s.endDate || ''} onChange={(e) => onUpd(s.id, { endDate: e.target.value })} className={inp} /> : (s.endDate || '—')}</Td>
                   <Td>{editable ? <textarea rows={1} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : (s.objective || '—')}</Td>
                   <Td>{editable ? <textarea rows={1} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : (s.output || '—')}</Td>
-                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} onBlur={() => onLogBudget(s.id)} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
-                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} onBlur={() => onLogBudget(s.id)} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
+                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
+                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
@@ -965,7 +1011,7 @@ const PhaseTable: React.FC<{
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => onShowHistory(i)} title="Lịch sử điều chỉnh ngân sách" className="relative p-1 text-blue-600 hover:bg-blue-100 rounded">
                         <History size={13} />
-                        {(s.budgetHistory?.length || 0) > 0 && <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{s.budgetHistory!.length}</span>}
+                        {(s.budgetAdjustments?.length || 0) > 0 && <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{s.budgetAdjustments!.length}</span>}
                       </button>
                       {editable && i >= 6 && <button onClick={() => onRmPhase(i)} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
                     </div>

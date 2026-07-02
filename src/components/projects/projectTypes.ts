@@ -48,7 +48,7 @@ export interface ProjectStep {
   output?: string; // kết quả đầu ra của phase
   attachmentNote?: string; // tài liệu đính kèm (tên file / link) — cũ
   attachmentFiles?: { name: string; size: string }[]; // file đính kèm của giai đoạn
-  budgetHistory?: { at: string; by: string; business: number; production: number; note?: string }[]; // lịch sử điều chỉnh ngân sách
+  budgetAdjustments?: BudgetAdjustment[]; // lịch sử/phiếu điều chỉnh ngân sách (cũ → mới, có luồng duyệt)
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh
@@ -189,6 +189,19 @@ export interface ProductionInfo {
   startDate?: string;
   endDate?: string;
   status?: string; // OPEN / RUNNING / CLOSED
+}
+
+export type BudgetAdjStatus = 'PENDING_BUSINESS_DIRECTOR' | 'PENDING_ACCOUNTANT' | 'PENDING_BOD' | 'APPROVED' | 'REJECTED';
+
+export interface BudgetAdjustment {
+  id: string;
+  createdAt: string;
+  requestedBy: string;
+  reason: string;
+  before: { business: number; production: number };
+  after: { business: number; production: number };
+  status: BudgetAdjStatus;
+  approvals: { role: UserRole; actor: string; action: ApprovalAction; at: string; comment?: string }[];
 }
 
 export interface OutsourceCode {
