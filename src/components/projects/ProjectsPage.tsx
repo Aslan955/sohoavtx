@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
-  Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2,
+  Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment,
@@ -815,6 +815,39 @@ const AllocHeader: React.FC<{ roman: string; title: string; color: string; budge
   </div>
 );
 
+// Ô đính kèm file cho từng giai đoạn (mock: lưu tên + dung lượng file)
+const fmtSize = (b: number) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+const AttachCell: React.FC<{ step: ProjectStep; editable: boolean; onUpd: (patch: Partial<ProjectStep>) => void }> = ({ step, editable, onUpd }) => {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const files = step.attachmentFiles || [];
+  const addFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    const added = Array.from(list).map(f => ({ name: f.name, size: fmtSize(f.size) }));
+    onUpd({ attachmentFiles: [...files, ...added] });
+    if (fileRef.current) fileRef.current.value = '';
+  };
+  const rm = (idx: number) => onUpd({ attachmentFiles: files.filter((_, i) => i !== idx) });
+  return (
+    <div className="space-y-1">
+      {files.map((f, i) => (
+        <div key={i} className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+          <Paperclip size={10} className="text-gray-400 shrink-0" />
+          <span className="flex-1 truncate text-[10px] font-medium text-gray-700" title={f.name}>{f.name}</span>
+          <span className="text-[9px] text-gray-400 shrink-0">{f.size}</span>
+          {editable && <button onClick={() => rm(i)} className="text-gray-400 hover:text-red-600 shrink-0"><X size={10} /></button>}
+        </div>
+      ))}
+      {files.length === 0 && !editable && <span className="text-gray-300">—</span>}
+      {editable && (
+        <>
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[10px] text-blue-600 hover:underline font-semibold"><Paperclip size={10} />Đính kèm file</button>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number;
@@ -879,7 +912,7 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
                   <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
-                  <Td>{editable ? <input value={s.attachmentNote || ''} onChange={(e) => onUpd(s.id, { attachmentNote: e.target.value })} placeholder="Tên file / link" className={inp} /> : (s.attachmentNote || '—')}</Td>
+                  <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
                   <Td right>{isLast
                     ? (editable ? <input type="number" value={s.revenue || 0} onChange={(e) => onUpd(s.id, { revenue: Number(e.target.value) })} className={`${numInp} bg-yellow-100 border-yellow-400 font-bold`} /> : <b className="bg-yellow-100 px-1.5 py-0.5 rounded">{fmtFull(s.revenue || 0)}</b>)

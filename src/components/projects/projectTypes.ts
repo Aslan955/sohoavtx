@@ -46,7 +46,8 @@ export interface ProjectStep {
   revenue?: number; // doanh thu bước này tạo ra (chỉ dùng cho phase tổng hợp)
   objective?: string; // mục tiêu của giai đoạn
   output?: string; // kết quả đầu ra của phase
-  attachmentNote?: string; // tài liệu đính kèm (tên file / link)
+  attachmentNote?: string; // tài liệu đính kèm (tên file / link) — cũ
+  attachmentFiles?: { name: string; size: string }[]; // file đính kèm của giai đoạn
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh
