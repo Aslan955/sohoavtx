@@ -473,24 +473,20 @@ const DetailView: React.FC<{
           <div className="p-4 border-r border-gray-200">
             <SectionTitle>Thông tin cơ hội kinh doanh</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
-              <DRow label="Khách hàng" value={pakd.customerName} />
               <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
-              <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
-              <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
+              <DRow label="Tên khách hàng" value={pakd.customerName} />
               <DRow label="Domain" value={pakd.domain || '—'} />
-              <DRow label="Người lập (Sale)" value={pakd.creator} />
-              <DRow label="Thời gian thực hiện" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
-              {pakd.tender.packageCode && <DRow label="Số hiệu gói thầu (TBMT)" value={pakd.tender.packageCode} mono />}
+              <DRow label="Sale / AM" value={pakd.creator} />
+              <DRow label="PM (Người quản lý dự án)" value={pakd.pmName || '—'} />
+              <DRow label="Tiến độ (thời gian thực hiện)" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
             </dl>
           </div>
           <div className="p-4">
             <SectionTitle>Tài chính</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
-              <DRow label="Giá trị hợp đồng dự kiến" value={fmtFull(pakd.expectedContractValue ?? pakd.revenue)} strong />
-              <DRow label="Chi phí dự kiến (Sale nhập ban đầu)" value={fmtFull(pakd.expectedCost ?? 0)} />
-              <DRow label="Chi phí kế hoạch theo bước (KD)" value={fmtFull(total)} className="text-red-600" />
-              <DRow label="Chi phí thực tế (Kế toán)" value={fmtFull(actualTotal)} className="text-red-600" />
-              <DRow label="Lợi nhuận dự kiến" value={`${fmtFull(profit)} (${pakd.revenue ? ((profit / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={profit >= 0 ? 'text-green-600' : 'text-red-600'} strong />
+              <DRow label="Doanh thu dự kiến tối thiểu" value={fmtFull(pakd.revenue)} strong />
+              <DRow label="Chi phí dự kiến tối đa" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
+              <DRow label="Lợi nhuận gộp dự kiến tối thiểu" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
             </dl>
           </div>
         </div>
@@ -1367,7 +1363,7 @@ const AuditView: React.FC<{ log: AuditLogEntry[] }> = ({ log }) => (
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], domain: DOMAINS[0],
+    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], pmName: '', domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
@@ -1379,7 +1375,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
       id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
       customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
+      businessDirector: f.businessDirector, salesDirector: f.salesDirector, pmName: f.pmName, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
       tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
@@ -1401,8 +1397,9 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
+          <div className="space-y-1"><label className={lab}>PM (Người quản lý dự án)</label><input value={f.pmName} onChange={(e) => setF({ ...f, pmName: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Người lập (Sale)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
+          <div className="space-y-1"><label className={lab}>Sale / AM (người lập)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Giá trị hợp đồng dự kiến (VNĐ) *</label><input type="number" value={f.expectedContractValue} onChange={(e) => setF({ ...f, expectedContractValue: Number(e.target.value) })} className={inp} /></div>

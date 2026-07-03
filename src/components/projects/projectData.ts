@@ -410,6 +410,7 @@ function makeSample(status: Pakd['status'], i: number): Pakd {
     status,
     businessDirector: BUSINESS_DIRECTORS[i % BUSINESS_DIRECTORS.length],
     salesDirector: SALES_DIRECTORS[i % SALES_DIRECTORS.length],
+    pmName: ['Hoàng Ngọc Sơn', 'Trần Minh Quang', 'Nguyễn Văn Bình', 'Phạm Đức Anh'][i % 4],
     domain: DOMAINS[i % DOMAINS.length],
     projStart: '2026-08-01', projEnd: '2027-02-28',
     expectedContractValue: revenue, expectedCost: Math.round(revenue * 0.6),
