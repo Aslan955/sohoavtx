@@ -453,25 +453,7 @@ const DetailView: React.FC<{
           )}
         </div>
 
-        {/* progress stepper */}
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <div className="flex items-center">
-            {PAKD_FLOW.map((st, i) => {
-              const curIdx = PAKD_FLOW.indexOf(pakd.status === 'RETURNED' ? 'DRAFT' : pakd.status);
-              const done = curIdx > i; const cur = curIdx === i;
-              return (
-                <React.Fragment key={st}>
-                  <div className="flex flex-col items-center">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${done ? 'bg-green-500 text-white' : cur ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{done ? <Check size={12} /> : i + 1}</div>
-                    <span className={`text-[9px] mt-1 ${cur ? 'text-blue-600 font-bold' : done ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>{PAKD_STATUS_LABEL[st]}</span>
-                  </div>
-                  {i < PAKD_FLOW.length - 1 && <div className={`flex-1 h-0.5 mx-1 ${done ? 'bg-green-500' : 'bg-gray-200'}`} />}
-                </React.Fragment>
-              );
-            })}
-          </div>
-          {pakd.status === 'RETURNED' && <p className="text-[11px] text-red-600 font-medium mt-2">⚠ PAKD bị trả lại — Sale chỉnh sửa & nộp lại. Xem lý do ở mục Lịch sử duyệt.</p>}
-        </div>
+        {pakd.status === 'RETURNED' && <div className="px-4 py-2 border-b border-gray-200 bg-white"><p className="text-[11px] text-red-600 font-medium">⚠ PAKD bị trả lại — Sale chỉnh sửa & nộp lại. Xem lý do ở mục Lịch sử trao đổi.</p></div>}
 
         {/* Thông tin cơ hội + tài chính */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-b border-gray-200">
