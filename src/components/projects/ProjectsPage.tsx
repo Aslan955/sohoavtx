@@ -4,7 +4,7 @@ import {
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment,
+  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -506,6 +506,7 @@ const DetailView: React.FC<{
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
               <PhaseAdvancePanel pakd={pakd} currentPhase={currentPhase} simUser={simUser}
                 onRequest={onRequestAdvance} onDecide={onDecideAdvance} />
+              <FlowHistory pakd={pakd} simUser={simUser} onAddComment={onAddComment} />
             </div>
           )}
 
@@ -953,6 +954,56 @@ const BudgetHistoryModal: React.FC<{
           )}
           <p className="text-[10px] text-gray-400">AM / Giám đốc khối muốn đổi ngân sách phải tạo đề xuất; hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → BOD</b> mới được áp dụng.</p>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ===================== Lịch sử trao đổi / ý kiến của các thành viên trong luồng =====================
+type FlowEntry = { at: string; author: string; role: UserRole; context: string; action: 'NOTE' | 'APPROVE' | 'REJECT' | 'REVISION'; text: string };
+const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: string) => void }> = ({ pakd, simUser, onAddComment }) => {
+  const [text, setText] = useState('');
+  const entries: FlowEntry[] = [];
+  (pakd.comments || []).forEach(c => entries.push({ at: c.createdAt, author: c.author, role: c.role, context: 'Ghi chú / Trao đổi', action: 'NOTE', text: c.content }));
+  (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment }));
+  pakd.steps.forEach((s, idx) => {
+    (s.advanceApprovals || []).forEach(a => entries.push({ at: a.at, author: a.actor, role: a.role, context: `Chuyển giai đoạn ${khCode(idx)}`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment || '' }));
+    (s.budgetAdjustments || []).forEach(ba => {
+      entries.push({ at: ba.createdAt, author: ba.requestedBy, role: 'SALE', context: `Điều chỉnh NS ${khCode(idx)}`, action: 'NOTE', text: `Đề xuất: ${ba.reason}` });
+      ba.approvals.forEach(ap => entries.push({ at: ap.at, author: ap.actor, role: ap.role, context: `Điều chỉnh NS ${khCode(idx)}`, action: ap.action === 'APPROVE' ? 'APPROVE' : 'REJECT', text: ap.comment || '' }));
+    });
+  });
+  entries.sort((a, b) => b.at.localeCompare(a.at));
+  const badge = (e: FlowEntry) => e.action === 'APPROVE' ? <span className="text-[9px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Duyệt</span>
+    : e.action === 'REJECT' ? <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">Từ chối</span>
+    : e.action === 'REVISION' ? <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Cần bổ sung</span>
+    : <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Ghi chú</span>;
+
+  return (
+    <div className="border border-gray-200 rounded">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+        <MessageSquare size={13} className="text-blue-600" />Lịch sử trao đổi trong luồng dự án ({entries.length})
+      </div>
+      <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
+        {entries.length === 0 ? <p className="text-[11px] text-gray-400 italic text-center py-4">Chưa có trao đổi/ý kiến nào.</p> : entries.map((e, i) => (
+          <div key={i} className="flex gap-2">
+            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center shrink-0">{e.author.split(' ').pop()?.[0] || '?'}</div>
+            <div className="flex-1 min-w-0 border-b border-gray-50 pb-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-gray-800">{e.author}</span>
+                <span className="text-[9px] bg-gray-100 text-gray-500 px-1 rounded">{ROLE_LABEL[e.role] || e.role}</span>
+                {badge(e)}
+                <span className="text-[9px] text-gray-400">• {e.context}</span>
+                <span className="text-[9px] text-gray-400 font-mono ml-auto">{e.at}</span>
+              </div>
+              {e.text && <p className="text-[11px] text-gray-700 whitespace-pre-wrap break-words mt-0.5">{e.text}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-gray-200 p-2 flex items-center gap-2">
+        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && text.trim()) { onAddComment(text.trim()); setText(''); } }} placeholder={`Nhập ý kiến/ghi chú (${ROLE_LABEL[simUser.role]})... Enter để gửi`} className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
+        <button onClick={() => { if (text.trim()) { onAddComment(text.trim()); setText(''); } }} className={Btn.primary}><Send size={12} className="mr-1" />Gửi</button>
       </div>
     </div>
   );
