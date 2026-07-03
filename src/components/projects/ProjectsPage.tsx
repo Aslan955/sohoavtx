@@ -513,14 +513,10 @@ const DetailView: React.FC<{
 
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
-              <PlanVersionsPanel pakd={pakd} />
               {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
                 onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
-              <PhaseAdvancePanel pakd={pakd} currentPhase={currentPhase} simUser={simUser}
-                onRequest={onRequestAdvance} onDecide={onDecideAdvance} />
-              <FlowHistory pakd={pakd} simUser={simUser} onAddComment={onAddComment} />
             </div>
           )}
 
