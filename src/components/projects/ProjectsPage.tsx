@@ -1363,7 +1363,7 @@ const AuditView: React.FC<{ log: AuditLogEntry[] }> = ({ log }) => (
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], pmName: '', domain: DOMAINS[0],
+    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
@@ -1375,7 +1375,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
       id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
       customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      businessDirector: f.businessDirector, salesDirector: f.salesDirector, pmName: f.pmName, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
+      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
       tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
@@ -1397,15 +1397,14 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>PM (Người quản lý dự án)</label><input value={f.pmName} onChange={(e) => setF({ ...f, pmName: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Sale / AM (người lập)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Giá trị hợp đồng dự kiến (VNĐ) *</label><input type="number" value={f.expectedContractValue} onChange={(e) => setF({ ...f, expectedContractValue: Number(e.target.value) })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Chi phí dự kiến bỏ ra (VNĐ)</label><input type="number" value={f.expectedCost} onChange={(e) => setF({ ...f, expectedCost: Number(e.target.value) })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><input type="number" value={f.expectedContractValue} onChange={(e) => setF({ ...f, expectedContractValue: Number(e.target.value) })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Chi phí dự kiến tối đa (VNĐ)</label><input type="number" value={f.expectedCost} onChange={(e) => setF({ ...f, expectedCost: Number(e.target.value) })} className={inp} /></div>
           <div className="col-span-2 space-y-1">
-            <label className={lab}>Lợi nhuận dự kiến (tự tính)</label>
+            <label className={lab}>Lợi nhuận gộp dự kiến tối thiểu (%)</label>
             {(() => { const p = f.expectedContractValue - f.expectedCost; const m = f.expectedContractValue > 0 ? (p / f.expectedContractValue) * 100 : 0; return (
               <div className={`w-full text-xs font-bold border rounded px-2.5 py-1.5 ${p >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
                 {p.toLocaleString('vi-VN')} đ ({m.toFixed(1)}%)
