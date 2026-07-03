@@ -325,6 +325,7 @@ const DetailView: React.FC<{
   const actualTotal = pakdActualCost(pakd);
   const profit = pakd.revenue - total;
   const [crOpen, setCrOpen] = useState(false);
+  const [reviseOpen, setReviseOpen] = useState(false);
   const [osLabel, setOsLabel] = useState('');
   const [sheet, setSheet] = useState<'BUSINESS' | 'PRODUCTION'>('BUSINESS');
   const [phaseIdx, setPhaseIdx] = useState(0); // KH01..KH06
@@ -375,8 +376,8 @@ const DetailView: React.FC<{
         <div className="flex items-center gap-2">
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
           {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Điều chỉnh chi phí</button>}
-          {pakd.status !== 'DRAFT' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR'].includes(simUser.role) && (
-            <button onClick={() => { const r = window.prompt('Lý do điều chỉnh phương án kinh doanh (sẽ mở lại & duyệt lại từ đầu):'); if (r && r.trim()) onRevisePlan(r.trim()); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Điều chỉnh phương án</button>
+          {pakd.status !== 'DRAFT' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR', 'ADMIN'].includes(simUser.role) && (
+            <button onClick={() => setReviseOpen(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Điều chỉnh phương án</button>
           )}
           {adjusting && <button onClick={() => setAdjusting(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong điều chỉnh</button>}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
@@ -552,6 +553,7 @@ const DetailView: React.FC<{
       </div>
 
       {crOpen && <ChangeRequestModal pakd={pakd} onClose={() => setCrOpen(false)} onSubmit={(r, c) => { onCreateCR(r, c); setCrOpen(false); }} />}
+      {reviseOpen && <RevisePlanModal pakd={pakd} simUser={simUser} onClose={() => setReviseOpen(false)} onSubmit={(r) => { onRevisePlan(r); setReviseOpen(false); }} />}
       {histIdx !== null && pakd.steps[histIdx] && (
         <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} simUser={simUser} locked={pakd.locked} onClose={() => setHistIdx(null)}
           onCreate={(after, reason) => onCreateBudgetAdj(pakd.steps[histIdx].id, after, reason)}
@@ -1436,6 +1438,37 @@ const AuditView: React.FC<{ log: AuditLogEntry[] }> = ({ log }) => (
     </table>
   </div>
 );
+
+// ===================== Popup: Điều chỉnh phương án (mở lại & duyệt lại từ đầu) =====================
+const RevisePlanModal: React.FC<{ pakd: Pakd; simUser: any; onClose: () => void; onSubmit: (reason: string) => void }> = ({ pakd, simUser, onClose, onSubmit }) => {
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState('');
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded shadow-lg w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
+          <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2"><FileEdit size={15} className="text-orange-600" />Đề nghị điều chỉnh phương án — {pakd.id}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <div className="p-5 space-y-3">
+          {err && <p className="text-xs text-red-600 font-medium">{err}</p>}
+          <div className="text-[11px] text-gray-600 bg-orange-50 border border-orange-200 rounded px-3 py-2">
+            Người đề nghị: <b>{simUser.fullName}</b> ({ROLE_LABEL[simUser.role]}). Trạng thái hiện tại: <b>{PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]}</b>.
+            <br />Sau khi gửi, phương án <b>mở lại về Nháp</b> để chỉnh sửa thông tin (mục tiêu, kết quả, thời gian, ngân sách...) và <b>duyệt lại từ đầu: AM → GĐ Kinh doanh → GĐ Khối → Kế toán → BOD</b>.
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-gray-500">Lý do điều chỉnh phương án *</label>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full text-xs border border-gray-300 rounded px-2.5 py-2 outline-none focus:border-blue-400" placeholder="Vì sao cần điều chỉnh phương án kinh doanh..." />
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <button onClick={onClose} className={Btn.ghost}>Hủy</button>
+            <button onClick={() => { if (!reason.trim()) { setErr('Nhập lý do điều chỉnh.'); return; } onSubmit(reason.trim()); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={13} className="mr-1" />Mở lại & duyệt lại từ đầu</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
