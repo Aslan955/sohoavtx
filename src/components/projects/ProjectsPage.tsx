@@ -336,6 +336,7 @@ const DetailView: React.FC<{
   const [sheet, setSheet] = useState<'BUSINESS' | 'PRODUCTION'>('BUSINESS');
   const [phaseIdx, setPhaseIdx] = useState(0); // KH01..KH06
   const [histIdx, setHistIdx] = useState<number | null>(null); // xem lịch sử ĐC ngân sách của giai đoạn
+  const [verTab, setVerTab] = useState<number | 'cur'>('cur'); // tab phiên bản phương án
   const [showComments, setShowComments] = useState(false);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
@@ -390,7 +391,7 @@ const DetailView: React.FC<{
           {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
           {pakd.status === 'COMPLETED' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR', 'ADMIN'].includes(simUser.role) && (
-            <button onClick={() => setReviseOpen(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Điều chỉnh phương án</button>
+            <button onClick={() => setReviseOpen(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiên bản mới (V{pakd.version + 1})</button>
           )}
           {adjusting && <button onClick={() => setAdjusting(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong điều chỉnh</button>}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
@@ -511,14 +512,30 @@ const DetailView: React.FC<{
             <SheetTab label="Sản xuất — Triển khai" active={sheet === 'PRODUCTION'} onClick={() => setSheet('PRODUCTION')} />
           </div>
 
-          {sheet === 'BUSINESS' && (
+          {sheet === 'BUSINESS' && (() => {
+            const pastVers = [...(pakd.planRevisions || [])].sort((a, b) => a.version - b.version); // các phiên bản đã chốt (snapshot)
+            const activeSnap = verTab !== 'cur' ? pastVers.find(r => r.version === verTab) : null;
+            return (
             <div className="p-4 space-y-4">
-              {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
-              <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
-                onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                onAddPhase={addPhase} onRmPhase={rmPhase} />
+              {/* Tab phiên bản phương án: V1 (đã duyệt) ... V{n} (hiện tại) */}
+              {pastVers.length > 0 && (
+                <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
+                  {pastVers.map(r => (
+                    <button key={r.version} onClick={() => setVerTab(r.version)} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === r.version ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{r.version} <span className="opacity-70">(đã chốt)</span></button>
+                  ))}
+                  <button onClick={() => setVerTab('cur')} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === 'cur' ? 'bg-[#007bff] text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{pakd.version} <span className="opacity-80">({PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]})</span></button>
+                </div>
+              )}
+
+              {activeSnap ? (
+                <SnapshotTable snap={activeSnap.snapshot} versionLabel={`V${activeSnap.version}`} by={activeSnap.by} at={activeSnap.at} />
+              ) : (
+                <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                  onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                  onAddPhase={addPhase} onRmPhase={rmPhase} />
+              )}
             </div>
-          )}
+          ); })()}
 
           {sheet === 'PRODUCTION' && (
             <ProductionSheet pakd={pakd} prodEditable={prodEditable} simRole={simUser.role} afterAccounting={afterAccounting}
@@ -1184,6 +1201,40 @@ const PhaseAdvancePanel: React.FC<{
   );
 };
 
+// ===================== Bảng phiên bản đã chốt (read-only snapshot) =====================
+const SnapshotTable: React.FC<{ snap: import('./projectTypes').PlanStepSnap[]; versionLabel: string; by: string; at: string }> = ({ snap, versionLabel, by, at }) => {
+  const totSX = snap.reduce((s, x) => s + x.prod, 0);
+  const totKD = snap.reduce((s, x) => s + x.biz, 0);
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-3 py-1.5">Đang xem <b>{versionLabel}</b> (đã chốt) — người chỉnh: {by} • {at}. Đây là bản chỉ xem.</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse border border-gray-300">
+          <thead><tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+            <Th w="130px">Giai đoạn</Th><Th w="105px">Bắt đầu</Th><Th w="105px">Kết thúc</Th><Th w="240px">Mục tiêu</Th><Th w="240px">Kết quả đầu ra</Th>
+            <Th w="110px" right>NS Sản xuất</Th><Th w="110px" right>NS Kinh doanh</Th><Th w="110px" right>Tổng</Th>
+          </tr></thead>
+          <tbody>
+            {snap.map((x, i) => (
+              <tr key={i} className="border-b border-gray-200">
+                <Td><span className="font-bold text-gray-800">{x.code}</span><span className="text-gray-500 block">{x.name}</span></Td>
+                <Td>{x.start || '—'}</Td><Td>{x.end || '—'}</Td>
+                <Td><span className="whitespace-pre-wrap">{x.objective || '—'}</span></Td>
+                <Td><span className="whitespace-pre-wrap">{x.output || '—'}</span></Td>
+                <Td right>{fmtFull(x.prod)}</Td><Td right>{fmtFull(x.biz)}</Td><Td right><b>{fmtFull(x.prod + x.biz)}</b></Td>
+              </tr>
+            ))}
+            <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+              <Td>Tổng</Td><Td></Td><Td></Td><Td></Td><Td></Td>
+              <Td right>{fmtFull(totSX)}</Td><Td right>{fmtFull(totKD)}</Td><Td right>{fmtFull(totSX + totKD)}</Td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
@@ -1522,7 +1573,7 @@ const RevisePlanModal: React.FC<{ pakd: Pakd; simUser: any; onClose: () => void;
           {err && <p className="text-xs text-red-600 font-medium">{err}</p>}
           <div className="text-[11px] text-gray-600 bg-orange-50 border border-orange-200 rounded px-3 py-2">
             Người đề nghị: <b>{simUser.fullName}</b> ({ROLE_LABEL[simUser.role]}). Trạng thái hiện tại: <b>{PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]}</b>.
-            <br />Sau khi gửi, phương án <b>mở lại về Nháp</b> để chỉnh sửa thông tin (mục tiêu, kết quả, thời gian, ngân sách...) và <b>duyệt lại từ đầu: AM → GĐ Kinh doanh → GĐ Khối → Kế toán → BOD</b>.
+            <br />Sau khi gửi, hệ thống lưu bản hiện tại thành <b>V{pakd.version} (đã chốt)</b> và tạo <b>V{pakd.version + 1}</b> để nhập lại thông tin (mục tiêu, kết quả, thời gian, ngân sách...) rồi <b>duyệt lại từ đầu: AM → GĐ Kinh doanh → GĐ Khối → Kế toán → BOD</b>. Bản V{pakd.version} vẫn xem lại được ở tab phiên bản.
           </div>
           <div className="space-y-1">
             <label className="text-[11px] font-semibold text-gray-500">Lý do điều chỉnh phương án *</label>
