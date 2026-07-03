@@ -327,3 +327,20 @@ export function decidePhaseAdvance(pakd: Pakd, stepId: string, role: UserRole, a
   pushAudit(log, updated, actor, role, `Duyệt hoàn tất — chuyển sang giai đoạn kế tiếp (KH${String(step.order + 1).padStart(2, '0')})`, undefined, undefined, 'Đủ GĐ Kinh doanh → GĐ Khối → Kế toán → BOD.');
   return { pakd: updated };
 }
+
+// ===================== Phiếu điều chỉnh phương án — mở lại & duyệt lại từ đầu =====================
+export function revisePlan(pakd: Pakd, reason: string, actor: string, role: UserRole, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  if (pakd.status === 'DRAFT') return { pakd, error: 'PAKD đang ở Nháp — có thể sửa trực tiếp, không cần phiếu điều chỉnh.' };
+  if (!reason.trim()) return { pakd, error: 'Nhập lý do điều chỉnh phương án.' };
+  const fromStatus = PAKD_STATUS_LABEL[pakd.status];
+  const rev = { id: rid('REV'), at: nowStr(), by: actor, role, reason, fromStatus };
+  const updated: Pakd = {
+    ...pakd,
+    status: 'DRAFT',
+    locked: false,
+    version: pakd.version + 1,
+    planRevisions: [rev, ...(pakd.planRevisions || [])],
+  };
+  pushAudit(log, updated, actor, role, 'Tạo phiếu điều chỉnh phương án — mở lại chỉnh sửa, duyệt lại từ đầu', fromStatus, 'Nháp', reason);
+  return { pakd: updated };
+}

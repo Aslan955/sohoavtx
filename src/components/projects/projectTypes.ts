@@ -166,6 +166,16 @@ export interface Pakd {
   changeRequests: ChangeRequest[];
   versionHistory: PakdVersionSnapshot[];
   comments?: PakdComment[];
+  planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
+}
+
+export interface PlanRevision {
+  id: string;
+  at: string;
+  by: string;
+  role: UserRole;
+  reason: string;
+  fromStatus: string; // trạng thái trước khi mở lại
 }
 
 // Giai đoạn triển khai do Khối sản xuất tạo (tách khỏi chi phí kinh doanh)

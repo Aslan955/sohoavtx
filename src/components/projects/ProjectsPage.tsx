@@ -15,7 +15,7 @@ import {
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
   openOutsourceCode, hasOpenChangeRequest, rid,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
-  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE,
+  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
@@ -133,7 +133,8 @@ export const ProjectsPage: React.FC = () => {
           onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))}
           onDecide={(action, comment) => runAction(current.id, (p, l) => approvePakd(p, simUser.role, action, comment, simUser.fullName, l))}
           onRequestAdvance={(sid) => runAction(current.id, (p, l) => requestPhaseAdvance(p, sid, simUser.fullName, l))}
-          onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))} />
+          onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))}
+          onRevisePlan={(reason) => runAction(current.id, (p, l) => revisePlan(p, reason, simUser.fullName, simUser.role, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -311,7 +312,8 @@ const DetailView: React.FC<{
   onDecide: (action: ApprovalAction, comment: string) => void;
   onRequestAdvance: (stepId: string) => void;
   onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance }) => {
+  onRevisePlan: (reason: string) => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan }) => {
   const [decision, setDecision] = useState('');
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role;
   const editable = canEditDirect(pakd, simUser.role);
@@ -369,7 +371,10 @@ const DetailView: React.FC<{
         <button onClick={onBack} className={Btn.ghost}><ArrowLeft size={14} className="mr-1.5" />Quay lại danh sách</button>
         <div className="flex items-center gap-2">
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
-          {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Tạo phiếu điều chỉnh</button>}
+          {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Điều chỉnh chi phí</button>}
+          {pakd.status !== 'DRAFT' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR'].includes(simUser.role) && (
+            <button onClick={() => { const r = window.prompt('Lý do điều chỉnh phương án kinh doanh (sẽ mở lại & duyệt lại từ đầu):'); if (r && r.trim()) onRevisePlan(r.trim()); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Điều chỉnh phương án</button>
+          )}
           {adjusting && <button onClick={() => setAdjusting(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong điều chỉnh</button>}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
         </div>
@@ -965,6 +970,7 @@ const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: 
   const [text, setText] = useState('');
   const entries: FlowEntry[] = [];
   (pakd.comments || []).forEach(c => entries.push({ at: c.createdAt, author: c.author, role: c.role, context: 'Ghi chú / Trao đổi', action: 'NOTE', text: c.content }));
+  (pakd.planRevisions || []).forEach(r => entries.push({ at: r.at, author: r.by, role: r.role, context: 'Điều chỉnh phương án (mở lại từ đầu)', action: 'REVISION', text: `${r.fromStatus} → Nháp. Lý do: ${r.reason}` }));
   (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment }));
   pakd.steps.forEach((s, idx) => {
     (s.advanceApprovals || []).forEach(a => entries.push({ at: a.at, author: a.actor, role: a.role, context: `Chuyển giai đoạn ${khCode(idx)}`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment || '' }));
