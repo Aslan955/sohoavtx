@@ -172,6 +172,10 @@ export interface Pakd {
   planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
 }
 
+export interface PlanStepSnap {
+  code: string; name: string; start?: string; end?: string; objective?: string; output?: string;
+  biz: number; prod: number; revenue: number;
+}
 export interface PlanRevision {
   id: string;
   at: string;
@@ -179,6 +183,8 @@ export interface PlanRevision {
   role: UserRole;
   reason: string;
   fromStatus: string; // trạng thái trước khi mở lại
+  version: number; // số phiên bản bị thay thế bởi lần điều chỉnh này
+  snapshot: PlanStepSnap[]; // ảnh chụp nội dung phương án tại thời điểm điều chỉnh
 }
 
 // Giai đoạn triển khai do Khối sản xuất tạo (tách khỏi chi phí kinh doanh)

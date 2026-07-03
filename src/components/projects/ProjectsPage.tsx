@@ -491,6 +491,7 @@ const DetailView: React.FC<{
 
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
+              <PlanVersionsPanel pakd={pakd} />
               {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
               <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
                 onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
@@ -1032,6 +1033,64 @@ const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: 
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && text.trim()) { onAddComment(text.trim()); setText(''); } }} placeholder={`Nhập ý kiến/ghi chú (${ROLE_LABEL[simUser.role]})... Enter để gửi`} className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
         <button onClick={() => { if (text.trim()) { onAddComment(text.trim()); setText(''); } }} className={Btn.primary}><Send size={12} className="mr-1" />Gửi</button>
       </div>
+    </div>
+  );
+};
+
+// ===================== Panel lịch sử phiên bản phương án (diff cũ → mới) =====================
+const PlanVersionsPanel: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
+  const [open, setOpen] = useState(false);
+  const revs = pakd.planRevisions || [];
+  if (revs.length === 0) return null;
+  // Chuỗi phiên bản theo version tăng dần: mỗi revision.snapshot là nội dung của version đó (đã bị thay thế)
+  const asc = [...revs].sort((a, b) => a.version - b.version);
+  const curSnap = pakd.steps.map((s, i) => ({ code: `KH${String(i + 1).padStart(2, '0')}`, name: s.name, start: s.startDate, end: s.endDate, objective: s.objective, output: s.output, biz: s.businessBudget || 0, prod: s.productionBudget || 0, revenue: s.revenue || 0 }));
+  const fields: { key: keyof typeof curSnap[number]; label: string; money?: boolean }[] = [
+    { key: 'name', label: 'Tên GĐ' }, { key: 'start', label: 'Bắt đầu' }, { key: 'end', label: 'Kết thúc' },
+    { key: 'objective', label: 'Mục tiêu' }, { key: 'output', label: 'Kết quả đầu ra' },
+    { key: 'biz', label: 'NS Kinh doanh', money: true }, { key: 'prod', label: 'NS Sản xuất', money: true }, { key: 'revenue', label: 'Doanh thu', money: true },
+  ];
+  const fmtV = (v: any, money?: boolean) => money ? fmtFull(Number(v || 0)) : (v || '—');
+  // transitions: v_k (asc[k].snapshot) -> v_{k+1} (asc[k+1].snapshot hoặc curSnap nếu là mới nhất)
+  const transitions = asc.map((r, k) => {
+    const next = asc[k + 1] ? asc[k + 1].snapshot : curSnap;
+    const changes: { code: string; label: string; from: string; to: string }[] = [];
+    r.snapshot.forEach((os, i) => {
+      const ns = next[i]; if (!ns) return;
+      fields.forEach(f => { if (String(os[f.key] ?? '') !== String((ns as any)[f.key] ?? '')) changes.push({ code: os.code, label: f.label, from: fmtV(os[f.key], f.money), to: fmtV((ns as any)[f.key], f.money) }); });
+    });
+    return { rev: r, fromV: r.version, toV: r.version + 1, changes };
+  }).reverse(); // mới nhất trước
+
+  return (
+    <div className="border border-gray-200 rounded">
+      <button onClick={() => setOpen(!open)} className="w-full bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+        <span className="flex items-center gap-1.5"><GitBranch size={13} className="text-orange-600" />Lịch sử phiên bản phương án — hiện tại v{pakd.version} ({revs.length} lần điều chỉnh)</span>
+        {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+      </button>
+      {open && (
+        <div className="p-3 space-y-3">
+          {transitions.map((t, i) => (
+            <div key={i} className="border border-gray-100 rounded">
+              <div className="bg-orange-50/50 border-b border-gray-100 px-3 py-1.5 text-[11px] flex items-center justify-between">
+                <span className="font-bold text-orange-800">v{t.fromV} → v{t.toV}</span>
+                <span className="text-gray-500">{t.rev.by} ({ROLE_LABEL[t.rev.role] || t.rev.role}) • {t.rev.at}</span>
+              </div>
+              <div className="p-2 space-y-1">
+                <p className="text-[11px] text-gray-600 italic">Lý do: {t.rev.reason}</p>
+                {t.changes.length === 0 ? <p className="text-[11px] text-gray-400">Không có thay đổi nội dung (chỉ mở lại duyệt).</p> : (
+                  <table className="w-full text-[11px] border-collapse border border-gray-100">
+                    <thead><tr className="bg-gray-50 text-gray-600"><Th w="60px">Giai đoạn</Th><Th w="120px">Trường</Th><Th>Cũ</Th><Th>Mới</Th></tr></thead>
+                    <tbody>{t.changes.map((c, k) => (
+                      <tr key={k} className="border-t border-gray-100"><Td mono>{c.code}</Td><Td>{c.label}</Td><Td><span className="text-gray-500 line-through">{c.from}</span></Td><Td><b className="text-green-700">{c.to}</b></Td></tr>
+                    ))}</tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

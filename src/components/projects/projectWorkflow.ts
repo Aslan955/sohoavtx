@@ -333,7 +333,11 @@ export function revisePlan(pakd: Pakd, reason: string, actor: string, role: User
   if (pakd.status === 'DRAFT') return { pakd, error: 'PAKD đang ở Nháp — có thể sửa trực tiếp, không cần phiếu điều chỉnh.' };
   if (!reason.trim()) return { pakd, error: 'Nhập lý do điều chỉnh phương án.' };
   const fromStatus = PAKD_STATUS_LABEL[pakd.status];
-  const rev = { id: rid('REV'), at: nowStr(), by: actor, role, reason, fromStatus };
+  const snapshot = pakd.steps.map((s, i) => ({
+    code: `KH${String(i + 1).padStart(2, '0')}`, name: s.name, start: s.startDate, end: s.endDate,
+    objective: s.objective, output: s.output, biz: s.businessBudget || 0, prod: s.productionBudget || 0, revenue: s.revenue || 0,
+  }));
+  const rev = { id: rid('REV'), at: nowStr(), by: actor, role, reason, fromStatus, version: pakd.version, snapshot };
   const updated: Pakd = {
     ...pakd,
     status: 'DRAFT',
