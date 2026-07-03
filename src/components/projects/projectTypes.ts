@@ -53,6 +53,9 @@ export interface ProjectStep {
   // Đề nghị chuyển sang giai đoạn kế tiếp — luồng GĐ Kinh doanh → GĐ Khối → Kế toán → BOD
   advanceStatus?: 'PENDING_SALES_DIRECTOR' | 'PENDING_BUSINESS_DIRECTOR' | 'PENDING_ACCOUNTANT' | 'PENDING_BOD';
   advanceApprovals?: { role: UserRole; actor: string; action: ApprovalAction; at: string; comment?: string }[];
+  // Số tiền thực tế đã chi cho giai đoạn (AM/GĐ KD/GĐ Khối cập nhật nhiều lần, có log)
+  actualSpent?: number;
+  spentLog?: { at: string; by: string; role: UserRole; amount: number }[];
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh

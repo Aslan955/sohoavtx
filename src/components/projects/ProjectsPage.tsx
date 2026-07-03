@@ -15,7 +15,7 @@ import {
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
   openOutsourceCode, hasOpenChangeRequest, rid,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
-  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan,
+  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
@@ -134,7 +134,8 @@ export const ProjectsPage: React.FC = () => {
           onDecide={(action, comment) => runAction(current.id, (p, l) => approvePakd(p, simUser.role, action, comment, simUser.fullName, l))}
           onRequestAdvance={(sid) => runAction(current.id, (p, l) => requestPhaseAdvance(p, sid, simUser.fullName, l))}
           onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))}
-          onRevisePlan={(reason) => runAction(current.id, (p, l) => revisePlan(p, reason, simUser.fullName, simUser.role, l))} />
+          onRevisePlan={(reason) => runAction(current.id, (p, l) => revisePlan(p, reason, simUser.fullName, simUser.role, l))}
+          onUpdSpent={(sid, amount) => runAction(current.id, (p, l) => updateActualSpent(p, sid, amount, simUser.fullName, simUser.role, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -313,7 +314,9 @@ const DetailView: React.FC<{
   onRequestAdvance: (stepId: string) => void;
   onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
   onRevisePlan: (reason: string) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan }) => {
+  onUpdSpent: (stepId: string, amount: number) => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent }) => {
+  const canEditSpent = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role);
   const [decision, setDecision] = useState('');
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role;
   const editable = canEditDirect(pakd, simUser.role);
@@ -488,8 +491,8 @@ const DetailView: React.FC<{
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
               {/* Bảng nhập thông tin các giai đoạn (dạng lưới) */}
-              <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase}
-                onUpd={updStep} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+              <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} />
               <PhaseAdvancePanel pakd={pakd} currentPhase={currentPhase} simUser={simUser}
                 onRequest={onRequestAdvance} onDecide={onDecideAdvance} />
@@ -940,9 +943,43 @@ const BudgetHistoryModal: React.FC<{
             </div>
           )}
           <p className="text-[10px] text-gray-400">AM / Giám đốc khối muốn đổi ngân sách phải tạo đề xuất; hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → BOD</b> mới được áp dụng.</p>
+
+          {/* Lịch sử cập nhật chi thực tế */}
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">Lịch sử cập nhật chi thực tế</p>
+            {(step.spentLog || []).length === 0 ? (
+              <p className="text-[11px] text-gray-400 italic">Chưa có cập nhật chi thực tế nào.</p>
+            ) : (
+              <table className="w-full text-[11px] border-collapse border border-gray-200">
+                <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="34px" center>Lần</Th><Th w="140px">Thời gian</Th><Th w="160px">Người cập nhật</Th><Th w="130px" right>Số tiền đã chi</Th></tr></thead>
+                <tbody>
+                  {step.spentLog!.map((sp, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      <Td center muted>{step.spentLog!.length - i}</Td>
+                      <Td mono>{sp.at}</Td>
+                      <Td>{sp.by} ({ROLE_LABEL[sp.role] || sp.role})</Td>
+                      <Td right><b className="text-amber-800">{fmtFull(sp.amount)}</b></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  );
+};
+
+// Ô nhập chi thực tế — commit khi rời ô hoặc Enter (ghi log 1 lần mỗi lần đổi)
+const SpentCell: React.FC<{ value: number; over: boolean; onCommit: (v: number) => void }> = ({ value, over, onCommit }) => {
+  const [v, setV] = useState(String(value));
+  React.useEffect(() => { setV(String(value)); }, [value]);
+  const commit = () => { const n = Number(v) || 0; if (n !== value) onCommit(n); };
+  return (
+    <input type="number" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      className={`w-full border rounded px-1.5 py-1 text-right outline-none focus:border-amber-500 ${over ? 'border-red-400 text-red-600 font-bold' : 'border-amber-300 bg-amber-50 font-semibold text-amber-800'}`} />
   );
 };
 
@@ -1070,10 +1107,10 @@ const PhaseAdvancePanel: React.FC<{
 
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
-  pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number;
-  onUpd: (sid: string, patch: Partial<ProjectStep>) => void;
+  pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
+  onUpd: (sid: string, patch: Partial<ProjectStep>) => void; onUpdSpent: (stepId: string, amount: number) => void;
   onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, onUpd, onShowHistory, onAddPhase, onRmPhase }) => {
+}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase }) => {
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
   const revenue = steps[lastIdx]?.revenue || 0;
@@ -1120,9 +1157,7 @@ const PhaseTable: React.FC<{
               const done = i + 1 < currentPhase; const isCur = i + 1 === currentPhase;
               const isLast = i === lastIdx;
               
-              const actBiz = s.costItems.reduce((sum, item) => sum + (item.actualAmount || 0), 0);
-              const actProd = (s.productionCostItems || []).reduce((sum, item) => sum + (item.actualAmount || 0), 0);
-              const rowActual = actBiz + actProd;
+              const rowActual = s.actualSpent || 0;
               const rowActualPct = rowTotal > 0 ? (rowActual / rowTotal) * 100 : 0;
 
               return (
@@ -1146,8 +1181,13 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
                   
-                  {/* Chi thực tế & % */}
-                  <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span></Td>
+                  {/* Chi thực tế đã chi (AM/GĐ KD/GĐ Khối nhập, có log) & % */}
+                  <Td right className="bg-amber-50/20">
+                    {canEditSpent
+                      ? <SpentCell value={rowActual} over={rowActual > rowTotal && rowTotal > 0} onCommit={(v) => onUpdSpent(s.id, v)} />
+                      : <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>}
+                    {(s.spentLog?.length || 0) > 0 && <button onClick={() => onShowHistory(i)} title="Lịch sử chi thực tế" className="ml-1 text-[9px] text-blue-600 hover:underline">({s.spentLog!.length} lần)</button>}
+                  </Td>
                   <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
@@ -1175,9 +1215,7 @@ const PhaseTable: React.FC<{
               <Td right>{fmtFull(totKD)}</Td>
               <Td right>{fmtFull(grand)}</Td>
               {(() => {
-                const totActBiz = steps.reduce((sum, st) => sum + st.costItems.reduce((s, c) => s + (c.actualAmount || 0), 0), 0);
-                const totActProd = steps.reduce((sum, st) => sum + (st.productionCostItems || []).reduce((s, c) => s + (c.actualAmount || 0), 0), 0);
-                const grandActual = totActBiz + totActProd;
+                const grandActual = steps.reduce((sum, st) => sum + (st.actualSpent || 0), 0);
                 const grandActualPct = grand > 0 ? (grandActual / grand) * 100 : 0;
                 return (
                   <>

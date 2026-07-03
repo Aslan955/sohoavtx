@@ -344,3 +344,15 @@ export function revisePlan(pakd: Pakd, reason: string, actor: string, role: User
   pushAudit(log, updated, actor, role, 'Tạo phiếu điều chỉnh phương án — mở lại chỉnh sửa, duyệt lại từ đầu', fromStatus, 'Nháp', reason);
   return { pakd: updated };
 }
+
+// ===================== Cập nhật chi thực tế đã chi cho giai đoạn (AM/GĐ KD/GĐ Khối) =====================
+export function updateActualSpent(pakd: Pakd, stepId: string, amount: number, actor: string, role: UserRole, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  const step = pakd.steps.find(s => s.id === stepId);
+  if (!step) return { pakd, error: 'Không tìm thấy giai đoạn.' };
+  const prev = step.actualSpent || 0;
+  if (prev === amount) return { pakd };
+  const entry = { at: nowStr(), by: actor, role, amount };
+  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, actualSpent: amount, spentLog: [entry, ...(s.spentLog || [])] } : s) };
+  pushAudit(log, updated, actor, role, `Cập nhật chi thực tế (${step.name})`, undefined, undefined, `${prev.toLocaleString('vi-VN')} đ → ${amount.toLocaleString('vi-VN')} đ`);
+  return { pakd: updated };
+}
