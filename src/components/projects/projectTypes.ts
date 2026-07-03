@@ -170,6 +170,8 @@ export interface Pakd {
   versionHistory: PakdVersionSnapshot[];
   comments?: PakdComment[];
   planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
+  editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
+  editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }
 
 export interface PlanStepSnap {

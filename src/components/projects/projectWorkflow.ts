@@ -360,3 +360,35 @@ export function updateActualSpent(pakd: Pakd, stepId: string, amount: number, ac
   pushAudit(log, updated, actor, role, `Cập nhật chi thực tế (${step.name})`, undefined, undefined, `${prev.toLocaleString('vi-VN')} đ → ${amount.toLocaleString('vi-VN')} đ`);
   return { pakd: updated };
 }
+
+// ===================== Sửa phương án khi ĐANG DUYỆT — duyệt lại từ bước người sửa =====================
+const EDIT_RESUME_STATUS: Partial<Record<UserRole, PakdStatus>> = {
+  SALE: 'PENDING_SALES_DIRECTOR',          // AM sửa -> duyệt lại từ GĐ Kinh doanh
+  SALES_DIRECTOR: 'PENDING_SALES_DIRECTOR', // GĐ KD sửa -> duyệt lại từ bước GĐ KD
+  BUSINESS_DIRECTOR: 'PENDING_BUSINESS_DIRECTOR', // GĐ Khối sửa -> duyệt lại từ bước GĐ Khối
+};
+const EDIT_ALLOWED_ROLES: UserRole[] = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'];
+
+export function canEditPlanNow(pakd: Pakd, role: UserRole): boolean {
+  return pakd.editingRole === role;
+}
+
+export function startEditDuringApproval(pakd: Pakd, role: UserRole, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  if (!EDIT_ALLOWED_ROLES.includes(role)) return { pakd, error: 'Chỉ AM / GĐ Kinh doanh / GĐ Khối được sửa phương án.' };
+  if (!PAKD_PENDING_ROLE[pakd.status]) return { pakd, error: 'Chỉ sửa khi PAKD đang chờ duyệt.' };
+  if (pakd.editingRole) return { pakd, error: `Phương án đang được ${pakd.editingRole} chỉnh sửa.` };
+  const snapshot = pakd.steps.map((s, i) => ({ code: `KH${String(i + 1).padStart(2, '0')}`, name: s.name, start: s.startDate, end: s.endDate, objective: s.objective, output: s.output, biz: s.businessBudget || 0, prod: s.productionBudget || 0, revenue: s.revenue || 0 }));
+  const updated: Pakd = { ...pakd, editingRole: role, editingSnapshot: snapshot, locked: false };
+  pushAudit(log, updated, actor, role, 'Bắt đầu sửa phương án (đang duyệt)', PAKD_STATUS_LABEL[pakd.status], PAKD_STATUS_LABEL[pakd.status], 'Tạm dừng duyệt để chỉnh sửa thông tin.');
+  return { pakd: updated };
+}
+
+export function submitEditDuringApproval(pakd: Pakd, role: UserRole, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  if (pakd.editingRole !== role) return { pakd, error: 'Bạn không đang ở chế độ sửa phương án.' };
+  const resume = EDIT_RESUME_STATUS[role]!;
+  const old = pakd.status;
+  const rev = { id: rid('REV'), at: nowStr(), by: actor, role, reason: `Sửa phương án khi đang duyệt — duyệt lại từ bước ${PAKD_STATUS_LABEL[resume]}`, fromStatus: PAKD_STATUS_LABEL[old], version: pakd.version, snapshot: pakd.editingSnapshot || [] };
+  const updated: Pakd = { ...pakd, editingRole: undefined, editingSnapshot: undefined, status: resume, version: pakd.version + 1, planRevisions: [rev, ...(pakd.planRevisions || [])] };
+  pushAudit(log, updated, actor, role, 'Sửa phương án & yêu cầu duyệt lại', PAKD_STATUS_LABEL[old], PAKD_STATUS_LABEL[resume], `Duyệt lại từ bước ${PAKD_STATUS_LABEL[resume]}.`);
+  return { pakd: updated };
+}

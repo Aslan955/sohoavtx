@@ -16,6 +16,7 @@ import {
   openOutsourceCode, hasOpenChangeRequest, rid,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent,
+  canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
@@ -135,7 +136,9 @@ export const ProjectsPage: React.FC = () => {
           onRequestAdvance={(sid) => runAction(current.id, (p, l) => requestPhaseAdvance(p, sid, simUser.fullName, l))}
           onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))}
           onRevisePlan={(reason) => runAction(current.id, (p, l) => revisePlan(p, reason, simUser.fullName, simUser.role, l))}
-          onUpdSpent={(sid, amount) => runAction(current.id, (p, l) => updateActualSpent(p, sid, amount, simUser.fullName, simUser.role, l))} />
+          onUpdSpent={(sid, amount) => runAction(current.id, (p, l) => updateActualSpent(p, sid, amount, simUser.fullName, simUser.role, l))}
+          onStartEdit={() => runAction(current.id, (p, l) => startEditDuringApproval(p, simUser.role, simUser.fullName, l))}
+          onSubmitEdit={() => runAction(current.id, (p, l) => submitEditDuringApproval(p, simUser.role, simUser.fullName, l))} />
       ) : (
         <>
           {/* Module tabs */}
@@ -315,11 +318,14 @@ const DetailView: React.FC<{
   onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
   onRevisePlan: (reason: string) => void;
   onUpdSpent: (stepId: string, amount: number) => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent }) => {
+  onStartEdit: () => void; onSubmitEdit: () => void;
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent, onStartEdit, onSubmitEdit }) => {
   const canEditSpent = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role);
   const [decision, setDecision] = useState('');
-  const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role;
-  const editable = canEditDirect(pakd, simUser.role);
+  const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
+  const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
+  const editable = canEditDirect(pakd, simUser.role) || editingNow;
+  const canStartEdit = !pakd.editingRole && !!PAKD_PENDING_ROLE[pakd.status] && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
   const actualEditable = simUser.role === 'ACCOUNTANT' || simUser.role === 'ADMIN'; // Kế toán nhập chi phí thực tế
   const total = pakdTotalCost(pakd);
   const actualTotal = pakdActualCost(pakd);
@@ -381,13 +387,24 @@ const DetailView: React.FC<{
         <div className="flex items-center gap-2">
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
           {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Điều chỉnh chi phí</button>}
-          {pakd.status !== 'DRAFT' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR', 'ADMIN'].includes(simUser.role) && (
+          {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
+          {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
+          {pakd.status === 'COMPLETED' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR', 'ADMIN'].includes(simUser.role) && (
             <button onClick={() => setReviseOpen(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Điều chỉnh phương án</button>
           )}
           {adjusting && <button onClick={() => setAdjusting(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong điều chỉnh</button>}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
         </div>
       </div>
+
+      {pakd.editingRole && (
+        <div className="border border-amber-300 bg-amber-50 rounded p-3 text-xs text-amber-800 flex items-center gap-2">
+          <FileEdit size={14} />
+          {editingNow
+            ? <span>Bạn đang <b>sửa phương án</b> (tạm dừng duyệt). Chỉnh xong bấm <b>"Yêu cầu duyệt lại (từ bước của tôi)"</b> — luồng sẽ chạy lại từ bước <b>{ROLE_LABEL[simUser.role]}</b>.</span>
+            : <span>Phương án đang được <b>{ROLE_LABEL[pakd.editingRole]}</b> chỉnh sửa — tạm dừng phê duyệt.</span>}
+        </div>
+      )}
 
       {/* Thanh phê duyệt khi tới lượt vai trò hiện tại */}
       {isMyTurn && (
