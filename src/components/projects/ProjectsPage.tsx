@@ -1222,8 +1222,6 @@ const PhaseTable: React.FC<{
               <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách phân bổ (đ)</th>
               <th colSpan={2} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Chi thực tế tính đến hiện tại</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
-              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '120px' }}>Doanh thu dự kiến</th>
-              <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '85px' }}>% Chi phí/DT</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}>Lịch sử NS</th>
             </tr>
             <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
@@ -1274,11 +1272,6 @@ const PhaseTable: React.FC<{
                   <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
-                  {/* Doanh thu dự kiến — chỉ nhập ở dòng cuối (ô vàng) */}
-                  <Td right>{isLast
-                    ? (editable ? <input type="number" value={s.revenue || 0} onChange={(e) => onUpd(s.id, { revenue: Number(e.target.value) })} className={`${numInp} bg-yellow-100 border-yellow-400 font-bold`} /> : <b className="bg-yellow-100 px-1.5 py-0.5 rounded">{fmtFull(s.revenue || 0)}</b>)
-                    : <span className="text-gray-300">—</span>}</Td>
-                  <Td right>{isLast && revenue > 0 ? <b>{((rowTotal / revenue) * 100).toFixed(0)}%</b> : <span className="text-gray-300">—</span>}</Td>
                   <Td center>
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => onShowHistory(i)} title="Lịch sử điều chỉnh ngân sách" className="relative p-1 text-blue-600 hover:bg-blue-100 rounded">
@@ -1308,14 +1301,12 @@ const PhaseTable: React.FC<{
                 );
               })()}
               <Td></Td>
-              <Td right>{revenue ? fmtFull(revenue) : '—'}</Td>
-              <Td right>{revenue > 0 ? <span className={grand / revenue > 1 ? 'text-red-600' : 'text-green-700'}>{((grand / revenue) * 100).toFixed(0)}%</span> : '—'}</Td>
               <Td></Td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-gray-400">Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Khi chỉnh sửa: có thể <b>tăng/giảm số giai đoạn</b> (thêm {khCode(steps.length)}, xóa bằng nút 🗑) và đổi tên giai đoạn.</p>
+      <p className="text-[10px] text-gray-400">Khi chỉnh sửa: có thể <b>tăng/giảm số giai đoạn</b> (thêm {khCode(steps.length)}, xóa bằng nút 🗑) và đổi tên giai đoạn.</p>
     </div>
   );
 };
