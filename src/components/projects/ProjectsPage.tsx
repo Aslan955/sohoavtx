@@ -346,7 +346,12 @@ const DetailView: React.FC<{
   const updStep = (sid: string, patch: Partial<ProjectStep>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, ...patch } : s) }));
   // Thêm / xóa giai đoạn (KH có thể định nghĩa và cộng thêm tùy dự án)
   const addPhase = () => setPakd(p => ({ ...p, steps: [...p.steps, { id: khCode(p.steps.length), order: p.steps.length + 1, name: `Giai đoạn ${p.steps.length + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] }] }));
-  const rmPhase = (idx: number) => setPakd(p => p.steps.length <= 6 ? p : { ...p, steps: p.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, id: khCode(i), order: i + 1 })) });
+  const rmPhase = (idx: number) => setPakd(p => {
+    if (p.steps.length <= 1) return p;
+    const steps = p.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, id: khCode(i), order: i + 1 }));
+    const currentPhase = Math.min(p.currentPhase || 1, steps.length);
+    return { ...p, steps, currentPhase };
+  });
   const addCost = (sid: string, it: Omit<CostItem, 'id'>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: [...s.costItems, { id: rid('CST'), ...it }] } : s) }));
   const updCost = (sid: string, cid: string, patch: Partial<CostItem>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.map(c => c.id === cid ? { ...c, ...patch } : c) } : s) }));
   const rmCost = (sid: string, cid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.filter(c => c.id !== cid) } : s) }));
@@ -1263,7 +1268,7 @@ const PhaseTable: React.FC<{
                         <History size={13} />
                         {(s.budgetAdjustments?.length || 0) > 0 && <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{s.budgetAdjustments!.length}</span>}
                       </button>
-                      {editable && i >= 6 && <button onClick={() => onRmPhase(i)} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
+                      {editable && steps.length > 1 && <button onClick={() => { if (window.confirm(`Xóa giai đoạn ${khCode(i)} — ${s.name}?`)) onRmPhase(i); }} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
                     </div>
                   </Td>
                 </tr>
@@ -1293,7 +1298,7 @@ const PhaseTable: React.FC<{
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-gray-400">Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Giai đoạn có thể định nghĩa lại tên và thêm mới ({khCode(steps.length)}...).</p>
+      <p className="text-[10px] text-gray-400">Doanh thu dự kiến nhập ở <b>dòng cuối</b> (ô vàng) • Khi chỉnh sửa: có thể <b>tăng/giảm số giai đoạn</b> (thêm {khCode(steps.length)}, xóa bằng nút 🗑) và đổi tên giai đoạn.</p>
     </div>
   );
 };
