@@ -497,11 +497,11 @@ const DetailView: React.FC<{
       { key: 'objective', label: 'Mục tiêu' }, { key: 'output', label: 'Kết quả đầu ra' },
       { key: 'businessBudget', label: 'NS Kinh doanh', money: true }, { key: 'productionBudget', label: 'NS Sản xuất', money: true },
     ];
-    // Số phiên bản điều chỉnh tiếp theo (Ver 1, Ver 2...): mỗi lần gửi duyệt là 1 version
-    const nextVersion = Math.max(0, ...(pakd.planChangeLogs || []).map(l => l.version || 0)) + 1;
+    // Số phiên bản: V1 = bản gốc đã chốt. Điều chỉnh mới → tăng V; nộp lại đơn bị trả → giữ nguyên V hiện tại.
+    const newVersion = isReturnedAdjust ? (pakd.version || 1) : (pakd.version || 1) + 1;
     const logs: PlanChangeLog[] = [];
     const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
-      ({ id: rid('LOG'), version: nextVersion, at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
+      ({ id: rid('LOG'), version: newVersion, at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
     // Diff thông tin chung của dự án (mã KH, tên KH, domain, PM, tiến độ, doanh thu, chi phí dự kiến)
     if (adjustInfoSnapshot) {
       const cur = infoSnap(pakd);
@@ -541,12 +541,13 @@ const DetailView: React.FC<{
       const reason = adjustReason.trim();
       // Điều chỉnh xong → nộp lại vào luồng duyệt từ bước đầu; ghi mốc & lý do vào lịch sử phê duyệt.
       const submitRec: ApprovalRecord = {
-        id: rid('AR'), stepLabel: `Điều chỉnh phương án Ver ${nextVersion} — nộp duyệt lại`, role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
-        comment: `Điều chỉnh phương án Ver ${nextVersion}${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
+        id: rid('AR'), stepLabel: `Điều chỉnh phương án V${newVersion} — nộp duyệt lại`, role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
+        comment: `Điều chỉnh phương án V${newVersion}${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
         oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
       };
       setPakd(p => ({
         ...p,
+        version: newVersion,
         planChangeLogs: [...logs, ...(p.planChangeLogs || [])],
         status: 'PENDING_SALES_DIRECTOR',
         pendingAdjustReason: reason,
@@ -756,6 +757,38 @@ const DetailView: React.FC<{
 
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
+              {/* Thanh phiên bản phương án: V1 (đã chốt) ... V(hiện tại) trạng thái */}
+              {(pakd.version > 1 || adjustMode) && (() => {
+                const pendingReapproval = !!pakd.pendingAdjustReason && !!PAKD_PENDING_ROLE[pakd.status];
+                const draftVer = isReturnedAdjust ? pakd.version : pakd.version + 1;
+                type Chip = { v: number; label: string; cls: string; pulse?: boolean };
+                const chips: Chip[] = [];
+                for (let v = 1; v <= pakd.version; v++) {
+                  const isCur = v === pakd.version;
+                  if (!isCur) { chips.push({ v, label: 'đã chốt duyệt', cls: 'bg-gray-100 text-gray-600 border-gray-300' }); continue; }
+                  if (adjustMode && isReturnedAdjust) chips.push({ v, label: 'đang soạn (sửa lại)', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                  else if (pendingReapproval) chips.push({ v, label: 'đang xin duyệt lại', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                  else if (pakd.status === 'RETURNED') chips.push({ v, label: 'bị trả lại — chờ sửa', cls: 'bg-red-100 text-red-700 border-red-300' });
+                  else if (pakd.status === 'COMPLETED') chips.push({ v, label: 'đã chốt · hiện hành', cls: 'bg-green-100 text-green-700 border-green-400' });
+                  else chips.push({ v, label: 'hiện hành', cls: 'bg-blue-100 text-blue-700 border-blue-300' });
+                }
+                if (adjustMode && !isReturnedAdjust) chips.push({ v: draftVer, label: 'đang soạn điều chỉnh', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                return (
+                  <div className="flex flex-wrap items-center gap-2 border border-gray-200 rounded bg-gray-50/70 px-3 py-2">
+                    <span className="text-[11px] text-gray-500 font-semibold">Phiên bản phương án:</span>
+                    {chips.map((c, i) => (
+                      <React.Fragment key={c.v}>
+                        {i > 0 && <span className="text-gray-300 text-xs">›</span>}
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold border rounded px-2 py-0.5 ${c.cls}`}>
+                          {c.pulse && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                          V{c.v} · {c.label}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                );
+              })()}
+
               {/* Banner khi đang điều chỉnh trực tiếp phương án */}
               {adjustMode && (
                 <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
