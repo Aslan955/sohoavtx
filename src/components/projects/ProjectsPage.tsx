@@ -20,7 +20,7 @@ import {
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
 } from './projectWorkflow';
 
-type ModuleTab = 'LIST' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
+type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
@@ -111,12 +111,20 @@ export const ProjectsPage: React.FC = () => {
     ...Object.fromEntries(Object.keys(PAKD_STATUS_LABEL).map(s => [s, pakds.filter(p => p.status === s).length])),
   } as Record<string, number>;
 
-  const filtered = pakds.filter(p => {
+  const matchFilters = (p: Pakd) => {
     const m = p.name.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()) || p.tender.packageCode.toLowerCase().includes(search.toLowerCase());
     const okStatus = statusFilter === 'ALL' || p.status === statusFilter;
     const okPhase = phaseFilter === 'ALL' || effectiveCurrentPhase(p) === phaseFilter;
     return m && okStatus && okPhase;
-  });
+  };
+  const filtered = pakds.filter(matchFilters);
+  // "Đơn của tôi" — PAKD do user hiện tại lập
+  const mine = pakds.filter(p => p.creator === simUser.fullName);
+  const mineFiltered = mine.filter(matchFilters);
+  const mineCounts = {
+    ALL: mine.length,
+    ...Object.fromEntries(Object.keys(PAKD_STATUS_LABEL).map(s => [s, mine.filter(p => p.status === s).length])),
+  } as Record<string, number>;
   // Số giai đoạn tối đa trong các PAKD (để dựng danh sách KH trong bộ lọc)
   const maxPhases = pakds.reduce((mx, p) => Math.max(mx, p.steps.length), 6);
 
@@ -176,6 +184,7 @@ export const ProjectsPage: React.FC = () => {
           {/* Module tabs */}
           <div className="flex border-b border-gray-200 mb-4">
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
+            <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
             <ModTab label="Phiếu điều chỉnh CP" count={pendingCR.length} active={moduleTab === 'CHANGES'} onClick={() => setModuleTab('CHANGES')} />
             <ModTab label="Nhật ký hệ thống" active={moduleTab === 'AUDIT'} onClick={() => setModuleTab('AUDIT')} />
@@ -183,6 +192,9 @@ export const ProjectsPage: React.FC = () => {
 
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
+          )}
+          {moduleTab === 'MINE' && (
+            <ListView pakds={mineFiltered} counts={mineCounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
           )}
           {moduleTab === 'APPROVALS' && (
             <ApprovalQueue pakds={pendingPakd} simUser={simUser} comment={comment} setComment={setComment}
