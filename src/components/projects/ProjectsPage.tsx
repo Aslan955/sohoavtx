@@ -873,12 +873,18 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">{children}</h3>
 );
 
-// Khối tổng hợp ngân sách của toàn phương án (tổng xin / đã chi / vượt / % chi phí)
+// Khối tổng hợp ngân sách của toàn phương án (tổng xin / đã chi / vượt / % chi phí).
+// "Vượt ngân sách?" xét 3 mức: vượt tổng (đỏ) > vượt cục bộ ở một số KH (cam) > trong ngân sách (xanh).
 const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
   const totalBudget = steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
   const totalSpent = steps.reduce((s, st) => s + (st.actualSpent || 0), 0);
   const pct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-  const over = totalSpent > totalBudget && totalBudget > 0;
+  const overTotal = totalSpent > totalBudget && totalBudget > 0;
+  // Các giai đoạn vượt ngân sách của chính nó
+  const overPhases = steps
+    .map((st, i) => ({ code: khCode(i), budget: (st.productionBudget || 0) + (st.businessBudget || 0), spent: st.actualSpent || 0 }))
+    .filter(x => x.budget > 0 && x.spent > x.budget);
+  const overDetail = overPhases.map(x => `${x.code}: chi ${fmtFull(x.spent)} / NS ${fmtFull(x.budget)} (${((x.spent / x.budget) * 100).toFixed(0)}%)`).join('\n');
   return (
     <div className="flex flex-wrap items-stretch gap-2 text-[11px]">
       <div className="border border-blue-200 bg-blue-50/60 rounded px-3 py-1.5 min-w-[150px]">
@@ -887,15 +893,25 @@ const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
       </div>
       <div className="border border-amber-200 bg-amber-50/60 rounded px-3 py-1.5 min-w-[150px]">
         <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Tổng ngân sách đã chi</p>
-        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</p>
+        <p className={`text-sm font-bold ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</p>
       </div>
-      <div className={`border rounded px-3 py-1.5 min-w-[130px] ${over ? 'border-red-200 bg-red-50/60' : 'border-green-200 bg-green-50/60'}`}>
+      <div title={overDetail || undefined}
+        className={`border rounded px-3 py-1.5 min-w-[150px] ${overTotal ? 'border-red-200 bg-red-50/60' : overPhases.length > 0 ? 'border-orange-300 bg-orange-50/70' : 'border-green-200 bg-green-50/60'}`}>
         <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Vượt ngân sách?</p>
-        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-green-600'}`}>{over ? 'Đã vượt' : 'Trong ngân sách'}</p>
+        {overTotal ? (
+          <p className="text-sm font-bold text-red-600">Đã vượt tổng NS</p>
+        ) : overPhases.length > 0 ? (
+          <>
+            <p className="text-sm font-bold text-orange-600">Vượt ở {overPhases.map(x => x.code).join(', ')}</p>
+            <p className="text-[9px] text-orange-500">Tổng vẫn trong NS — di chuột xem chi tiết</p>
+          </>
+        ) : (
+          <p className="text-sm font-bold text-green-600">Trong ngân sách</p>
+        )}
       </div>
-      <div className={`border rounded px-3 py-1.5 min-w-[120px] ${over ? 'border-red-200 bg-red-50/60' : 'border-gray-200 bg-gray-50'}`}>
+      <div className={`border rounded px-3 py-1.5 min-w-[120px] ${overTotal ? 'border-red-200 bg-red-50/60' : 'border-gray-200 bg-gray-50'}`}>
         <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">% Chi phí / NS</p>
-        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-gray-700'}`}>{totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'}</p>
+        <p className={`text-sm font-bold ${overTotal ? 'text-red-600' : 'text-gray-700'}`}>{totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'}</p>
       </div>
     </div>
   );
