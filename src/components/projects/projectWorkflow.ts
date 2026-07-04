@@ -134,11 +134,14 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction |
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Khóa chi phí', old, next, `Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }
 
-  // BOD duyệt (-> COMPLETED) -> hệ thống tự tạo dự án Jira & xóa lý do điều chỉnh đang chờ
+  // BOD duyệt (-> COMPLETED) -> tạo Jira, xóa lý do điều chỉnh đang chờ & KHÓA toàn bộ chi thực tế đã nhập (không sửa được nữa)
   if (pakd.status === 'PENDING_BOD') {
     const key = pakd.customerCode.substring(0, 6).toUpperCase();
-    updated = { ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}`, pendingAdjustReason: undefined };
-    pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Tạo dự án Jira', old, next, `Đã tạo project Jira ${key}.`);
+    updated = {
+      ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}`, pendingAdjustReason: undefined,
+      steps: updated.steps.map(s => (s.spentLog || []).length > 0 ? { ...s, spentLog: s.spentLog!.map(e => ({ ...e, locked: true })) } : s),
+    };
+    pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Tạo dự án Jira', old, next, `Đã tạo project Jira ${key}. Chi thực tế đã nhập được khóa sau duyệt.`);
   }
 
   pushAudit(log, updated, actor, role, `Phê duyệt (${stepLabel})`, old, next, record.comment);
@@ -375,6 +378,25 @@ export function updateActualSpent(pakd: Pakd, stepId: string, increment: number,
   const entry = { at: nowStr(), by: actor, role, amount: increment };
   const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, actualSpent: total, spentLog: [entry, ...(s.spentLog || [])] } : s) };
   pushAudit(log, updated, actor, role, `Cập nhật chi thực tế (${step.name})`, undefined, undefined, `Lần ${(step.spentLog?.length || 0) + 1}: +${increment.toLocaleString('vi-VN')} đ → tổng ${total.toLocaleString('vi-VN')} đ`);
+  return { pakd: updated };
+}
+
+// Tổng chi đã KHÓA (đã qua duyệt) của một giai đoạn — phần này không được sửa nữa.
+export const lockedSpentTotal = (step: { spentLog?: { amount: number; locked?: boolean }[] }): number =>
+  (step.spentLog || []).filter(e => e.locked).reduce((s, e) => s + e.amount, 0);
+
+// Sửa lại tổng chi đã nhập (AM/GĐ KD/GĐ Khối) — chỉ khi đơn CHƯA được duyệt; ghi log dòng điều chỉnh (delta ±).
+export function editActualSpent(pakd: Pakd, stepId: string, newTotal: number, actor: string, role: UserRole, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+  if (pakd.status === 'COMPLETED') return { pakd, error: 'Đơn đã được duyệt — không thể sửa chi đã nhập. Hãy tạo phiếu điều chỉnh.' };
+  const step = pakd.steps.find(s => s.id === stepId);
+  if (!step) return { pakd, error: 'Không tìm thấy giai đoạn.' };
+  const prev = step.actualSpent || 0;
+  if (newTotal === prev) return { pakd };
+  const lockedMin = lockedSpentTotal(step);
+  if (newTotal < lockedMin) return { pakd, error: `Không thể sửa xuống dưới ${lockedMin.toLocaleString('vi-VN')} đ — phần này đã được duyệt ở lần trước.` };
+  const entry = { at: nowStr(), by: actor, role, amount: newTotal - prev, edited: true };
+  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, actualSpent: newTotal, spentLog: [entry, ...(s.spentLog || [])] } : s) };
+  pushAudit(log, updated, actor, role, `Sửa chi thực tế (${step.name})`, undefined, undefined, `${prev.toLocaleString('vi-VN')} đ → ${newTotal.toLocaleString('vi-VN')} đ (điều chỉnh có log)`);
   return { pakd: updated };
 }
 

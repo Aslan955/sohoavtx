@@ -55,7 +55,8 @@ export interface ProjectStep {
   advanceApprovals?: { role: UserRole; actor: string; action: ApprovalAction; at: string; comment?: string }[];
   // Số tiền thực tế đã chi cho giai đoạn (AM/GĐ KD/GĐ Khối cập nhật nhiều lần, có log)
   actualSpent?: number;
-  spentLog?: { at: string; by: string; role: UserRole; amount: number }[];
+  // amount = khoản chi của lần đó; edited = dòng điều chỉnh sửa lại tổng (có thể âm); locked = đã qua duyệt, không sửa được nữa
+  spentLog?: { at: string; by: string; role: UserRole; amount: number; edited?: boolean; locked?: boolean }[];
   businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
   productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
   costItems: CostItem[]; // các khoản chi phí Kinh doanh

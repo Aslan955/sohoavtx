@@ -16,7 +16,7 @@ import {
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
   openOutsourceCode, hasOpenChangeRequest, rid, generateCodes,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
-  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent,
+  requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent, editActualSpent, lockedSpentTotal,
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
 } from './projectWorkflow';
 
@@ -177,6 +177,7 @@ export const ProjectsPage: React.FC = () => {
           onDecideAdvance={(sid, action, comment) => runAction(current.id, (p, l) => decidePhaseAdvance(p, sid, simUser.role, action, comment, simUser.fullName, l))}
           onRevisePlan={(reason) => runAction(current.id, (p, l) => revisePlan(p, reason, simUser.fullName, simUser.role, l))}
           onUpdSpent={(sid, amount) => runAction(current.id, (p, l) => updateActualSpent(p, sid, amount, simUser.fullName, simUser.role, l))}
+          onEditSpent={(sid, total) => runAction(current.id, (p, l) => editActualSpent(p, sid, total, simUser.fullName, simUser.role, l))}
           onStartEdit={() => runAction(current.id, (p, l) => startEditDuringApproval(p, simUser.role, simUser.fullName, l))}
           onSubmitEdit={() => runAction(current.id, (p, l) => submitEditDuringApproval(p, simUser.role, simUser.fullName, l))} />
       ) : (
@@ -374,8 +375,9 @@ const DetailView: React.FC<{
   onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
   onRevisePlan: (reason: string) => void;
   onUpdSpent: (stepId: string, amount: number) => void;
+  onEditSpent: (stepId: string, newTotal: number) => void;
   onStartEdit: () => void; onSubmitEdit: () => void;
-}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent, onStartEdit, onSubmitEdit }) => {
+}> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent, onEditSpent, onStartEdit, onSubmitEdit }) => {
   const canEditSpent = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role);
   const [decision, setDecision] = useState('');
   const [draftSaved, setDraftSaved] = useState(false); // xác nhận đã lưu nháp
@@ -761,6 +763,7 @@ const DetailView: React.FC<{
               )}
 
               <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
                 onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
                 onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
             </div>
@@ -1314,7 +1317,11 @@ const BudgetHistoryModal: React.FC<{
                       <Td center muted>{step.spentLog!.length - i}</Td>
                       <Td mono>{sp.at}</Td>
                       <Td>{sp.by} ({ROLE_LABEL[sp.role] || sp.role})</Td>
-                      <Td right><b className="text-amber-800">{fmtFull(sp.amount)}</b></Td>
+                      <Td right>
+                        <b className={sp.amount < 0 ? 'text-red-600' : 'text-amber-800'}>{sp.amount > 0 && sp.edited ? '+' : ''}{fmtFull(sp.amount)}</b>
+                        {sp.edited && <span className="ml-1 text-[9px] font-bold text-blue-700 bg-blue-100 px-1 py-0.5 rounded">Điều chỉnh</span>}
+                        {sp.locked && <span title="Đã khóa sau duyệt" className="ml-1 inline-flex align-middle text-gray-400"><Lock size={10} /></span>}
+                      </Td>
                       <Td right><b className="text-gray-700">{fmtFull(cumulative)}</b></Td>
                     </tr>
                     );
@@ -1350,6 +1357,29 @@ const BudgetHistoryModal: React.FC<{
         </div>
       </div>
     </div>
+  );
+};
+
+// Ô tổng chi đã nhập — bấm bút chì để sửa lại tổng (chỉ khi đơn chưa duyệt; ghi log điều chỉnh; không xuống dưới phần đã khóa)
+const TotalSpentCell: React.FC<{ value: number; over: boolean; lockedMin: number; onCommit: (v: number) => void }> = ({ value, over, lockedMin, onCommit }) => {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(value);
+  if (!editing) return (
+    <span className="inline-flex items-center gap-1">
+      <span className={over ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(value)}</span>
+      <button onClick={() => { setV(value); setEditing(true); }} title="Sửa lại tổng chi (có log)" className="p-0.5 text-gray-400 hover:text-blue-600"><FileEdit size={11} /></button>
+    </span>
+  );
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <NumberInput value={v} onChange={setV} onKeyDown={(e) => { if (e.key === 'Enter') { onCommit(v); setEditing(false); } if (e.key === 'Escape') setEditing(false); }}
+        className="w-28 border border-blue-300 bg-blue-50 rounded px-1.5 py-1 text-right outline-none focus:border-blue-500 font-semibold" />
+      {lockedMin > 0 && <span className="text-[9px] text-gray-400">tối thiểu {fmtFull(lockedMin)} (đã duyệt)</span>}
+      <span className="flex gap-1">
+        <button onClick={() => { onCommit(v); setEditing(false); }} className="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold rounded hover:bg-blue-700">Lưu</button>
+        <button onClick={() => setEditing(false)} className="px-1.5 py-0.5 bg-gray-200 text-gray-600 text-[10px] font-semibold rounded hover:bg-gray-300">Hủy</button>
+      </span>
+    </span>
   );
 };
 
@@ -1745,7 +1775,8 @@ const PhaseTable: React.FC<{
   onUpd: (sid: string, patch: Partial<ProjectStep>) => void; onUpdSpent: (stepId: string, amount: number) => void;
   onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
   onImport: (rows: ImportRow[]) => void; onSetCurrentPhase: (n: number) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase, onImport, onSetCurrentPhase }) => {
+  canEditSpentTotal: boolean; onEditSpent: (stepId: string, newTotal: number) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase, onImport, onSetCurrentPhase, canEditSpentTotal, onEditSpent }) => {
   const [importOpen, setImportOpen] = useState(false);
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
@@ -1848,10 +1879,12 @@ const PhaseTable: React.FC<{
                       </button>
                     )}
                   </Td>
-                  {/* Tổng chi phí các lần (cộng dồn) */}
+                  {/* Tổng chi phí các lần (cộng dồn) — sửa được khi đơn chưa duyệt (có log) */}
                   <Td right className="bg-amber-50/20">
-                    <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>
-                    {(s.spentLog?.length || 0) > 0 && <span className="block text-[9px] text-gray-400">{s.spentLog!.length} lần</span>}
+                    {canEditSpentTotal && (s.spentLog?.length || 0) > 0
+                      ? <TotalSpentCell value={rowActual} over={rowActual > rowTotal && rowTotal > 0} lockedMin={lockedSpentTotal(s)} onCommit={(v) => onEditSpent(s.id, v)} />
+                      : <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>}
+                    {(s.spentLog?.length || 0) > 0 && <span className="block text-[9px] text-gray-400">{s.spentLog!.length} lần{!canEditSpentTotal ? ' • đã khóa sau duyệt' : ''}</span>}
                   </Td>
                   <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
