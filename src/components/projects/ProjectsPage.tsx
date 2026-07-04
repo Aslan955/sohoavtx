@@ -343,8 +343,13 @@ const DetailView: React.FC<{
   const [showComments, setShowComments] = useState(false);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
-  const currentPhase = pakd.currentPhase || 1;
+  const storedPhase = pakd.currentPhase || 1;
   const setCurrentPhase = (n: number) => setPakd(p => ({ ...p, currentPhase: n }));
+  // Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
+  const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
+  const furthestWithInfo = pakd.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0);
+  // Giai đoạn hiện tại luôn ít nhất bằng KH xa nhất đã có thông tin.
+  const currentPhase = Math.max(storedPhase, furthestWithInfo);
   const [adjusting, setAdjusting] = useState(false);
   // Sau khi khóa (đã duyệt V1), Sale mở "phiếu điều chỉnh" để bổ sung/đổi tên/xóa khoản chi phí ở cột V mới
   const costEditable = editable || (simUser.role === 'SALE' && adjusting);
@@ -562,7 +567,7 @@ const DetailView: React.FC<{
               ) : (
                 <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
                   onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                  onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} />
+                  onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
               )}
             </div>
           ); })()}
@@ -1442,8 +1447,8 @@ const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
   onUpd: (sid: string, patch: Partial<ProjectStep>) => void; onUpdSpent: (stepId: string, amount: number) => void;
   onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
-  onImport: (rows: ImportRow[]) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase, onImport }) => {
+  onImport: (rows: ImportRow[]) => void; onSetCurrentPhase: (n: number) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase, onImport, onSetCurrentPhase }) => {
   const [importOpen, setImportOpen] = useState(false);
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
@@ -1457,7 +1462,16 @@ const PhaseTable: React.FC<{
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <SectionTitle>Thông tin các giai đoạn ({steps.length}) — giai đoạn hiện tại: {khCode(currentPhase - 1)}</SectionTitle>
+        <div className="flex items-center gap-2 flex-wrap">
+          <SectionTitle>Thông tin các giai đoạn ({steps.length})</SectionTitle>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-gray-500">Giai đoạn hiện tại:</span>
+            <select value={currentPhase} onChange={(e) => onSetCurrentPhase(Number(e.target.value))}
+              className="text-[11px] font-bold text-blue-700 border border-blue-300 bg-blue-50 rounded px-2 py-1 outline-none focus:border-blue-500 cursor-pointer">
+              {steps.map((s, i) => <option key={s.id} value={i + 1}>{khCode(i)} — {s.name}</option>)}
+            </select>
+          </div>
+        </div>
         {editable && (
           <div className="flex items-center gap-2">
             <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
