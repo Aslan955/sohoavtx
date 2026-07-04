@@ -1840,7 +1840,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           </div>
           <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-gray-100 mt-1">
             <button type="button" onClick={onClose} className={Btn.ghost}>Hủy</button>
-            <button type="submit" className={Btn.primary}><FileEdit size={13} className="mr-1.5" />Lưu nháp</button>
+            <button type="submit" className={Btn.primary}><FileEdit size={13} className="mr-1.5" />Lưu</button>
           </div>
         </form>
       </div>
