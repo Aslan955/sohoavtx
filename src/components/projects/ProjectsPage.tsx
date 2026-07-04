@@ -36,6 +36,14 @@ const ROLE_LABEL: Record<string, string> = {
 const fmtB = (v: number) => `${(v / 1000000000).toFixed(2)} tỷ`;
 const fmtFull = (v: number) => v.toLocaleString('vi-VN') + ' đ';
 
+// Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
+const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
+// Giai đoạn hiện tại của 1 PAKD = max(giá trị đã lưu, KH xa nhất đã có thông tin).
+const effectiveCurrentPhase = (p: Pakd): number => {
+  const furthest = p.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0);
+  return Math.max(p.currentPhase || 1, furthest);
+};
+
 const PakdStatusCell: React.FC<{ status: string }> = ({ status }) => (
   <div className="flex items-center space-x-1.5">
     <span className={`w-2 h-2 rounded-full ${STATUS_DOT[status] || 'bg-gray-400'}`} />
@@ -53,6 +61,7 @@ export const ProjectsPage: React.FC = () => {
     return SYSTEM_USERS.find(u => u.id === id) || null;
   });
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [phaseFilter, setPhaseFilter] = useState<number | 'ALL'>('ALL'); // lọc theo giai đoạn hiện tại (KH)
   const [search, setSearch] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
@@ -86,8 +95,12 @@ export const ProjectsPage: React.FC = () => {
 
   const filtered = pakds.filter(p => {
     const m = p.name.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()) || p.tender.packageCode.toLowerCase().includes(search.toLowerCase());
-    return statusFilter === 'ALL' ? m : m && p.status === statusFilter;
+    const okStatus = statusFilter === 'ALL' || p.status === statusFilter;
+    const okPhase = phaseFilter === 'ALL' || effectiveCurrentPhase(p) === phaseFilter;
+    return m && okStatus && okPhase;
   });
+  // Số giai đoạn tối đa trong các PAKD (để dựng danh sách KH trong bộ lọc)
+  const maxPhases = pakds.reduce((mx, p) => Math.max(mx, p.steps.length), 6);
 
   return (
     <div className="p-4 bg-white m-4 rounded-sm shadow-sm min-w-[1000px] text-gray-800">
@@ -151,7 +164,7 @@ export const ProjectsPage: React.FC = () => {
           </div>
 
           {moduleTab === 'LIST' && (
-            <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} />
+            <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
           )}
           {moduleTab === 'APPROVALS' && (
             <ApprovalQueue pakds={pendingPakd} simUser={simUser} comment={comment} setComment={setComment}
@@ -240,7 +253,8 @@ const Btn = {
 const ListView: React.FC<{
   pakds: Pakd[]; counts: Record<string, number>; statusFilter: string; setStatusFilter: (v: string) => void;
   search: string; setSearch: (v: string) => void; onOpen: (id: string) => void;
-}> = ({ pakds, counts, statusFilter, setStatusFilter, search, setSearch, onOpen }) => (
+  phaseFilter: number | 'ALL'; setPhaseFilter: (v: number | 'ALL') => void; maxPhases: number;
+}> = ({ pakds, counts, statusFilter, setStatusFilter, search, setSearch, onOpen, phaseFilter, setPhaseFilter, maxPhases }) => (
   <div>
     {/* status filter tabs */}
     <div className="flex border-b border-gray-200 mb-3 overflow-x-auto">
@@ -250,11 +264,21 @@ const ListView: React.FC<{
       ))}
     </div>
 
-    <div className="flex items-center justify-between mb-2">
+    <div className="flex items-center justify-between mb-2 gap-2">
       <button className={Btn.ghost}><FileSpreadsheet size={14} className="mr-1.5" />Export XLSX</button>
-      <div className="relative w-64">
-        <input type="text" placeholder="Tìm theo tên, mã PAKD, gói thầu..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:border-blue-400 outline-none" />
-        <Search size={14} className="absolute left-2.5 top-2 text-gray-400" />
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-gray-500 whitespace-nowrap">Giai đoạn:</span>
+          <select value={String(phaseFilter)} onChange={(e) => setPhaseFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+            className="text-xs border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400 cursor-pointer">
+            <option value="ALL">Tất cả</option>
+            {Array.from({ length: maxPhases }, (_, i) => <option key={i} value={i + 1}>{khCode(i)}</option>)}
+          </select>
+        </div>
+        <div className="relative w-64">
+          <input type="text" placeholder="Tìm theo tên, mã PAKD, gói thầu..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:border-blue-400 outline-none" />
+          <Search size={14} className="absolute left-2.5 top-2 text-gray-400" />
+        </div>
       </div>
     </div>
 
@@ -265,7 +289,7 @@ const ListView: React.FC<{
             <Th w="36px">#</Th><Th w="90px">Mã PAKD</Th><Th w="90px">Mã tổng</Th><Th w="220px">Tên dự án / gói thầu</Th>
             <Th w="110px">Số hiệu gói thầu</Th><Th w="180px">Chủ đầu tư</Th><Th w="120px">Hình thức</Th>
             <Th w="90px" right>Giá dự thầu</Th><Th w="90px" right>Tổng chi phí</Th><Th w="80px" right>LN (%)</Th>
-            <Th w="120px">Trạng thái</Th><Th w="50px" center>Ver</Th><Th w="70px" center>Thao tác</Th>
+            <Th w="80px" center>Giai đoạn</Th><Th w="120px">Trạng thái</Th><Th w="50px" center>Ver</Th><Th w="70px" center>Thao tác</Th>
           </tr>
         </thead>
         <tbody>
@@ -283,13 +307,14 @@ const ListView: React.FC<{
                 <Td right>{fmtB(p.revenue)}</Td>
                 <Td right>{fmtB(total)}</Td>
                 <Td right><span className={profit >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{p.revenue ? ((profit / p.revenue) * 100).toFixed(1) : 0}%</span></Td>
+                <Td center><span className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold text-[10px]">{khCode(effectiveCurrentPhase(p) - 1)}</span></Td>
                 <Td><div className="flex items-center gap-1.5">{p.locked && <Lock size={11} className="text-orange-400" />}{hasOpenChangeRequest(p) && <FileEdit size={11} className="text-purple-500" />}<PakdStatusCell status={p.status} /></div></Td>
                 <Td center mono>v{p.version}</Td>
                 <Td center><button title="Xem chi tiết" onClick={() => onOpen(p.id)} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Eye size={13} /></button></Td>
               </tr>
             );
           })}
-          {pakds.length === 0 && <tr><td colSpan={13} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
+          {pakds.length === 0 && <tr><td colSpan={14} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -343,13 +368,9 @@ const DetailView: React.FC<{
   const [showComments, setShowComments] = useState(false);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
-  const storedPhase = pakd.currentPhase || 1;
   const setCurrentPhase = (n: number) => setPakd(p => ({ ...p, currentPhase: n }));
-  // Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
-  const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
-  const furthestWithInfo = pakd.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0);
   // Giai đoạn hiện tại luôn ít nhất bằng KH xa nhất đã có thông tin.
-  const currentPhase = Math.max(storedPhase, furthestWithInfo);
+  const currentPhase = effectiveCurrentPhase(pakd);
   const [adjusting, setAdjusting] = useState(false);
   // Sau khi khóa (đã duyệt V1), Sale mở "phiếu điều chỉnh" để bổ sung/đổi tên/xóa khoản chi phí ở cột V mới
   const costEditable = editable || (simUser.role === 'SALE' && adjusting);
