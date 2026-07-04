@@ -1182,22 +1182,6 @@ const BudgetHistoryModal: React.FC<{
             Ngân sách hiện tại: KD <b>{fmtFull(curBiz)}</b> • SX <b>{fmtFull(curProd)}</b> • Tổng <b className="text-blue-700">{fmtFull(curBiz + curProd)}</b>. Luồng duyệt: <b>GĐ Khối → BOD</b>.
           </div>
 
-          {canCreate && !creating && <button onClick={() => { setNb(curBiz); setNp(curProd); setCreating(true); }} className={Btn.primary}><Plus size={13} className="mr-1" />Tạo phiếu điều chỉnh ngân sách</button>}
-          {creating && (
-            <div className="border border-purple-200 bg-purple-50/40 rounded p-3 space-y-2">
-              <p className="text-[11px] font-bold text-purple-700 uppercase">Phiếu điều chỉnh mới (cũ → mới)</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><label className="text-[10px] font-semibold text-gray-500">NS Kinh doanh mới</label><input type="number" value={nb} onChange={(e) => setNb(Number(e.target.value))} className={inp} /><p className="text-[10px] text-gray-400 text-right">cũ: {fmtFull(curBiz)}</p></div>
-                <div className="space-y-1"><label className="text-[10px] font-semibold text-gray-500">NS Sản xuất mới</label><input type="number" value={np} onChange={(e) => setNp(Number(e.target.value))} className={inp} /><p className="text-[10px] text-gray-400 text-right">cũ: {fmtFull(curProd)}</p></div>
-              </div>
-              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Lý do điều chỉnh..." className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400" />
-              <div className="flex gap-2">
-                <button onClick={() => { onCreate({ business: nb, production: np }, reason); setCreating(false); setReason(''); }} className={Btn.purple}>Nộp phiếu (→ GĐ Khối)</button>
-                <button onClick={() => setCreating(false)} className={Btn.ghost}>Hủy</button>
-              </div>
-            </div>
-          )}
-
           {list.length === 0 ? (
             <p className="text-xs text-gray-400 italic text-center py-6">Chưa có phiếu điều chỉnh ngân sách nào.</p>
           ) : (
@@ -1230,8 +1214,6 @@ const BudgetHistoryModal: React.FC<{
               })}
             </div>
           )}
-          <p className="text-[10px] text-gray-400">AM / Giám đốc khối muốn đổi ngân sách phải tạo đề xuất; hiển thị <b>cũ → mới</b> và phải qua duyệt <b>GĐ Khối → BOD</b> mới được áp dụng.</p>
-
           {/* Lịch sử cập nhật chi thực tế */}
           <div className="border-t border-gray-200 pt-3">
             <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">Lịch sử cập nhật chi thực tế</p>
