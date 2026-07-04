@@ -693,28 +693,6 @@ const DetailView: React.FC<{
         </div>
       </div>
 
-      {/* Lịch sử điều chỉnh trực tiếp phương án (cũ → mới) */}
-      {(pakd.planChangeLogs || []).length > 0 && (
-        <Panel title="Lịch sử điều chỉnh phương án (dữ liệu cũ → mới)" icon={<History size={13} />}>
-          <table className="w-full text-[11px] border-collapse">
-            <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <Th w="120px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th><Th w="160px">Lý do</Th><Th w="60px" center>Giai đoạn</Th><Th w="120px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Dữ liệu sau thay đổi</Th>
-            </tr></thead>
-            <tbody>{pakd.planChangeLogs!.map(l => (
-              <tr key={l.id} className="border-b border-gray-100 align-top">
-                <Td muted mono>{l.at}</Td>
-                <Td>{l.by} <span className="text-gray-400">({ROLE_LABEL[l.role] || l.role})</span></Td>
-                <Td><span className="italic text-gray-600">{l.reason || '—'}</span></Td>
-                <Td center><span className="font-semibold text-gray-700">{l.stepCode}</span></Td>
-                <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
-                <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
-                <Td><span className="whitespace-pre-wrap text-green-700 font-medium">{l.after}</span></Td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </Panel>
-      )}
-
       {/* version history */}
       {pakd.versionHistory.length > 0 && (
         <Panel title="Lịch sử phiên bản chi phí" icon={<GitBranch size={13} />}>
@@ -787,6 +765,7 @@ const DetailView: React.FC<{
       {reviseOpen && <RevisePlanModal pakd={pakd} simUser={simUser} onClose={() => setReviseOpen(false)} onSubmit={(r) => { onRevisePlan(r); setReviseOpen(false); }} />}
       {histIdx !== null && pakd.steps[histIdx] && (
         <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} simUser={simUser} locked={pakd.locked} onClose={() => setHistIdx(null)}
+          changeLogs={(pakd.planChangeLogs || []).filter(l => l.stepCode === khCode(histIdx))}
           onCreate={(after, reason) => onCreateBudgetAdj(pakd.steps[histIdx].id, after, reason)}
           onDecide={(adjId, action, comment) => onDecideBudgetAdj(pakd.steps[histIdx].id, adjId, action, comment)} />
       )}
@@ -1177,10 +1156,10 @@ const BADiff: React.FC<{ before: number; after: number }> = ({ before, after }) 
 );
 
 const BudgetHistoryModal: React.FC<{
-  step: ProjectStep; phaseCode: string; simUser: any; locked: boolean; onClose: () => void;
+  step: ProjectStep; phaseCode: string; simUser: any; locked: boolean; onClose: () => void; changeLogs: PlanChangeLog[];
   onCreate: (after: { business: number; production: number }, reason: string) => void;
   onDecide: (adjId: string, action: ApprovalAction, comment: string) => void;
-}> = ({ step, phaseCode, simUser, locked, onClose, onCreate, onDecide }) => {
+}> = ({ step, phaseCode, simUser, locked, onClose, changeLogs, onCreate, onDecide }) => {
   const list = step.budgetAdjustments || [];
   const curBiz = step.businessBudget || 0, curProd = step.productionBudget || 0;
   const [creating, setCreating] = useState(false);
@@ -1275,6 +1254,30 @@ const BudgetHistoryModal: React.FC<{
                     </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Lịch sử điều chỉnh phương án (dữ liệu cũ → mới) của giai đoạn này */}
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5"><FileEdit size={12} className="text-orange-600" />Lịch sử điều chỉnh phương án ({phaseCode})</p>
+            {changeLogs.length === 0 ? (
+              <p className="text-[11px] text-gray-400 italic">Chưa có điều chỉnh nào ở giai đoạn này.</p>
+            ) : (
+              <table className="w-full text-[11px] border-collapse border border-gray-200">
+                <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="120px">Thời gian</Th><Th w="130px">Người điều chỉnh</Th><Th w="140px">Lý do</Th><Th w="110px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Sau thay đổi</Th></tr></thead>
+                <tbody>
+                  {changeLogs.map(l => (
+                    <tr key={l.id} className="border-b border-gray-100 align-top">
+                      <Td muted mono>{l.at}</Td>
+                      <Td>{l.by} <span className="text-gray-400">({ROLE_LABEL[l.role] || l.role})</span></Td>
+                      <Td><span className="italic text-gray-600">{l.reason || '—'}</span></Td>
+                      <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
+                      <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
+                      <Td><span className="whitespace-pre-wrap text-green-700 font-medium">{l.after}</span></Td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
