@@ -54,11 +54,12 @@ function pushAudit(log: AuditLogEntry[], pakd: Pakd, actor: string, role: UserRo
 // ----- Quyền chỉnh sửa cấu trúc/chi phí trực tiếp -----
 // Sale chỉ sửa trực tiếp khi PAKD chưa khóa và đang ở Nháp/Bị trả lại.
 export function canEditDirect(pakd: Pakd, role: UserRole): boolean {
-  return role === 'SALE' && !pakd.locked && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED');
+  // AM / GĐ Kinh doanh / GĐ Khối đều có thể tạo & sửa phương án ở trạng thái Nháp / Bị trả lại.
+  return ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(role) && !pakd.locked && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED');
 }
 
-// ----- Sale nộp PAKD -----
-export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+// ----- Nộp PAKD (AM / GĐ Kinh doanh / GĐ Khối) -----
+export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[], role: UserRole = 'SALE'): { pakd: Pakd; error?: string } {
   if (pakd.status !== 'DRAFT' && pakd.status !== 'RETURNED') {
     return { pakd, error: 'Chỉ nộp được PAKD khi đang ở trạng thái Nháp hoặc Bị trả lại.' };
   }
@@ -66,14 +67,14 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[]): { p
     return { pakd, error: 'PAKD cần có ít nhất 1 bước thực hiện trước khi nộp.' };
   }
   const old = pakd.status;
-  // Ghi mốc "AM nộp trình duyệt" vào lịch sử phê duyệt để hiển thị đủ luồng từ AM → BOD.
+  // Ghi mốc "nộp trình duyệt" vào lịch sử phê duyệt để hiển thị đủ luồng từ người lập → BOD.
   const submitRecord: ApprovalRecord = {
-    id: rid('AR'), stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor, action: 'SUBMIT',
-    comment: old === 'RETURNED' ? 'AM chỉnh sửa & nộp lại sau khi bị trả lại.' : 'AM nộp phương án vào hàng đợi phê duyệt.',
+    id: rid('AR'), stepLabel: 'Người lập nộp trình duyệt', role, actor, action: 'SUBMIT',
+    comment: old === 'RETURNED' ? 'Chỉnh sửa & nộp lại sau khi bị trả lại.' : 'Nộp phương án vào hàng đợi phê duyệt.',
     oldStatus: old, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: nowStr(),
   };
   const updated: Pakd = { ...pakd, status: 'PENDING_SALES_DIRECTOR', approvalHistory: [submitRecord, ...pakd.approvalHistory] };
-  pushAudit(log, updated, actor, 'SALE', 'Nộp PAKD trình duyệt', old, updated.status, 'AM nộp PAKD vào hàng đợi phê duyệt Giám đốc Kinh doanh.');
+  pushAudit(log, updated, actor, role, 'Nộp PAKD trình duyệt', old, updated.status, 'Nộp PAKD vào hàng đợi phê duyệt Giám đốc Kinh doanh.');
   return { pakd: updated };
 }
 

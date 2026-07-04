@@ -124,7 +124,7 @@ export const ProjectsPage: React.FC = () => {
             </div>
             <button onClick={logout} title="Đăng xuất" className="ml-1 text-gray-400 hover:text-red-600 flex items-center gap-1"><LogOut size={13} /></button>
           </div>
-          {simUser.role === 'SALE' && !current && (
+          {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && !current && (
             <button onClick={() => setCreateOpen(true)} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
               <Plus size={16} className="mr-1" />Tạo dự án
             </button>
@@ -140,7 +140,7 @@ export const ProjectsPage: React.FC = () => {
 
       {current ? (
         <DetailView pakd={current} simUser={simUser} onBack={() => setSelectedId('')} setPakd={(fn) => setPakd(current.id, fn)}
-          onSubmit={() => runAction(current.id, (p, l) => submitPakd(p, simUser.fullName, l))}
+          onSubmit={() => runAction(current.id, (p, l) => submitPakd(p, simUser.fullName, l, simUser.role))}
           onCreateCR={(reason, changes) => runAction(current.id, (p) => createChangeRequest(p, reason, changes, simUser.fullName))}
           onAddOutsource={(label) => runAction(current.id, (p, l) => openOutsourceCode(p, label, simUser.fullName, l))}
           onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))}
@@ -1941,7 +1941,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Sale / AM (người lập)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
+          <div className="space-y-1"><label className={lab}>Người lập (AM / GĐ Kinh doanh / GĐ Khối)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><input type="number" value={f.expectedContractValue} onChange={(e) => setF({ ...f, expectedContractValue: Number(e.target.value) })} className={inp} /></div>
