@@ -544,7 +544,7 @@ const DetailView: React.FC<{
           )}
           {adjustMode && (
             <>
-              <button onClick={saveAdjustment} className={Btn.green}><Check size={14} className="mr-1.5" />Lưu điều chỉnh</button>
+              <button onClick={saveAdjustment} className={Btn.green}><Send size={14} className="mr-1.5" />Gửi duyệt</button>
               <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Hủy</button>
             </>
           )}
@@ -690,7 +690,7 @@ const DetailView: React.FC<{
                 <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
                   <FileEdit size={14} className="mt-0.5 shrink-0" />
                   <div>
-                    <div>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Lưu điều chỉnh"</b> — mọi thay đổi (cũ → mới) sẽ được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</div>
+                    <div>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Gửi duyệt"</b> — phương án sẽ được trình duyệt lại từ đầu; mọi thay đổi (cũ → mới) được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</div>
                     <div className="mt-1">Lý do điều chỉnh: <b className="text-orange-900">{adjustReason}</b></div>
                   </div>
                 </div>
