@@ -445,7 +445,6 @@ const DetailView: React.FC<{
           <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Ý kiến / lý do (tùy chọn)..." className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => { onDecide('APPROVE', decision); setDecision(''); }} className={Btn.green}><Check size={13} className="mr-1" />Duyệt</button>
-            <button onClick={() => { onDecide('REQUEST_REVISION', decision); setDecision(''); }} className="flex items-center px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded hover:bg-amber-600"><FileEdit size={13} className="mr-1" />Cần bổ sung</button>
             <button onClick={() => { onDecide('REJECT', decision); setDecision(''); }} className={Btn.red}><Ban size={13} className="mr-1" />Từ chối</button>
           </div>
         </div>
