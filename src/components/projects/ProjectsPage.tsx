@@ -323,6 +323,7 @@ const DetailView: React.FC<{
 }> = ({ pakd, simUser, onBack, setPakd, onSubmit, onCreateCR, onAddOutsource, onAddComment, onCreateBudgetAdj, onDecideBudgetAdj, onDecide, onRequestAdvance, onDecideAdvance, onRevisePlan, onUpdSpent, onStartEdit, onSubmitEdit }) => {
   const canEditSpent = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role);
   const [decision, setDecision] = useState('');
+  const [draftSaved, setDraftSaved] = useState(false); // xác nhận đã lưu nháp
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
@@ -415,6 +416,8 @@ const DetailView: React.FC<{
       <div className="flex items-center justify-between">
         <button onClick={onBack} className={Btn.ghost}><ArrowLeft size={14} className="mr-1.5" />Quay lại danh sách</button>
         <div className="flex items-center gap-2">
+          {draftSaved && <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600"><Check size={13} />Đã lưu nháp</span>}
+          {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={() => { setDraftSaved(true); window.setTimeout(() => setDraftSaved(false), 2500); }} className={Btn.green}><FileEdit size={14} className="mr-1.5" />Lưu nháp</button>}
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
           {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Điều chỉnh chi phí</button>}
           {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
