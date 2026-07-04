@@ -737,10 +737,6 @@ const DetailView: React.FC<{
 
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-start justify-end gap-3 flex-wrap">
-                <BudgetSummaryBar steps={pakd.steps} />
-              </div>
-
               {/* Banner khi đang điều chỉnh trực tiếp phương án */}
               {adjustMode && (
                 <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
@@ -926,8 +922,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">{children}</h3>
 );
 
-// Khối tổng hợp ngân sách của toàn phương án (tổng xin / đã chi / vượt / % chi phí).
-// "Vượt ngân sách?" xét 3 mức: vượt tổng (đỏ) > vượt cục bộ ở một số KH (cam) > trong ngân sách (xanh).
+// Thanh tổng hợp ngân sách 1 dòng: NS đã xin • Đã chi (%) • trạng thái vượt (tổng đỏ / cục bộ theo KH cam / trong NS xanh).
 const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
   const totalBudget = steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
   const totalSpent = steps.reduce((s, st) => s + (st.actualSpent || 0), 0);
@@ -938,34 +933,20 @@ const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
     .map((st, i) => ({ code: khCode(i), budget: (st.productionBudget || 0) + (st.businessBudget || 0), spent: st.actualSpent || 0 }))
     .filter(x => x.budget > 0 && x.spent > x.budget);
   const overDetail = overPhases.map(x => `${x.code}: chi ${fmtFull(x.spent)} / NS ${fmtFull(x.budget)} (${((x.spent / x.budget) * 100).toFixed(0)}%)`).join('\n');
+  const sep = <span className="w-px h-4 bg-gray-200" />;
   return (
-    <div className="flex flex-wrap items-stretch gap-2 text-[11px]">
-      <div className="border border-blue-200 bg-blue-50/60 rounded px-3 py-1.5 min-w-[150px]">
-        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Tổng ngân sách đã xin</p>
-        <p className="text-sm font-bold text-blue-700">{fmtFull(totalBudget)}</p>
-      </div>
-      <div className="border border-amber-200 bg-amber-50/60 rounded px-3 py-1.5 min-w-[150px]">
-        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Tổng ngân sách đã chi</p>
-        <p className={`text-sm font-bold ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</p>
-      </div>
-      <div title={overDetail || undefined}
-        className={`border rounded px-3 py-1.5 min-w-[150px] ${overTotal ? 'border-red-200 bg-red-50/60' : overPhases.length > 0 ? 'border-orange-300 bg-orange-50/70' : 'border-green-200 bg-green-50/60'}`}>
-        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Vượt ngân sách?</p>
-        {overTotal ? (
-          <p className="text-sm font-bold text-red-600">Đã vượt tổng NS</p>
-        ) : overPhases.length > 0 ? (
-          <>
-            <p className="text-sm font-bold text-orange-600">Vượt ở {overPhases.map(x => x.code).join(', ')}</p>
-            <p className="text-[9px] text-orange-500">Tổng vẫn trong NS — di chuột xem chi tiết</p>
-          </>
-        ) : (
-          <p className="text-sm font-bold text-green-600">Trong ngân sách</p>
-        )}
-      </div>
-      <div className={`border rounded px-3 py-1.5 min-w-[120px] ${overTotal ? 'border-red-200 bg-red-50/60' : 'border-gray-200 bg-gray-50'}`}>
-        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">% Chi phí / NS</p>
-        <p className={`text-sm font-bold ${overTotal ? 'text-red-600' : 'text-gray-700'}`}>{totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'}</p>
-      </div>
+    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border border-gray-200 bg-gray-50/70 rounded px-3 py-1.5">
+      <span className="text-gray-500">NS đã xin: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b></span>
+      {sep}
+      <span className="text-gray-500">Đã chi: <b className={`text-xs ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</b> <span className={`font-semibold ${overTotal ? 'text-red-600' : 'text-gray-600'}`}>({totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'})</span></span>
+      {sep}
+      {overTotal ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">⚠ Đã vượt tổng NS</span>
+      ) : overPhases.length > 0 ? (
+        <span title={overDetail} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-bold cursor-help">⚠ Vượt ở {overPhases.map(x => x.code).join(', ')}</span>
+      ) : (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold">✓ Trong ngân sách</span>
+      )}
     </div>
   );
 };
@@ -1765,7 +1746,7 @@ const PhaseTable: React.FC<{
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <SectionTitle>Thông tin các giai đoạn ({steps.length})</SectionTitle>
           <div className="flex items-center gap-1.5">
@@ -1776,12 +1757,15 @@ const PhaseTable: React.FC<{
             </select>
           </div>
         </div>
-        {editable && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
-            <button onClick={onAddPhase} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm giai đoạn ({khCode(steps.length)})</button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <BudgetSummaryBar steps={steps} />
+          {editable && (
+            <>
+              <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
+              <button onClick={onAddPhase} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm giai đoạn ({khCode(steps.length)})</button>
+            </>
+          )}
+        </div>
       </div>
       {importOpen && <ImportPhasesModal stepCount={steps.length} onClose={() => setImportOpen(false)} onImport={(rows) => { onImport(rows); setImportOpen(false); }} />}
       <div className="overflow-x-auto">
