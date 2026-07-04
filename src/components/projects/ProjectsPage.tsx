@@ -1025,11 +1025,6 @@ const BudgetHistoryModal: React.FC<{
                         <div>Tổng: <BADiff before={a.before.business + a.before.production} after={a.after.business + a.after.production} /></div>
                       </div>
                       <p className="text-gray-500 italic">Lý do: {a.reason}</p>
-                      {a.approvals.length > 0 && (
-                        <div className="text-gray-500 space-y-0.5">
-                          {a.approvals.map((ap, k) => <div key={k}>• {ap.at} — <b>{ap.actor}</b> ({ROLE_LABEL[ap.role]}): <span className={ap.action === 'APPROVE' ? 'text-green-600' : 'text-red-600'}>{ap.action === 'APPROVE' ? 'Duyệt' : 'Từ chối'}</span>{ap.comment ? ` — ${ap.comment}` : ''}</div>)}
-                        </div>
-                      )}
                       {canDecide && (
                         <div className="flex items-center gap-2 pt-1">
                           <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Ý kiến..." className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
