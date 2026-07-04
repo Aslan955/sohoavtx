@@ -488,12 +488,13 @@ const DetailView: React.FC<{
         }
       }
     }
-    if (logs.length > 0) {
+    // Gửi duyệt khi có thay đổi, hoặc khi đang sửa lại phiếu bị trả lại (cho phép nộp lại dù không đổi nội dung).
+    if (logs.length > 0 || isReturnedAdjust) {
       const reason = adjustReason.trim();
       // Điều chỉnh xong → nộp lại vào luồng duyệt từ bước đầu; ghi mốc & lý do vào lịch sử phê duyệt.
       const submitRec: ApprovalRecord = {
         id: rid('AR'), stepLabel: 'Điều chỉnh phương án — nộp duyệt lại', role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
-        comment: `Điều chỉnh phương án (${logs.length} thay đổi). Lý do: ${reason}`,
+        comment: `Điều chỉnh phương án${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
         oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
       };
       setPakd(p => ({
@@ -506,7 +507,9 @@ const DetailView: React.FC<{
     }
     setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
   };
-  const canAdjustPlan = pakd.status === 'COMPLETED' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
+  // Điều chỉnh phương án: khi đã Hoàn tất, HOẶC khi phiếu điều chỉnh bị trả lại (RETURNED + đã khóa) để sửa & gửi duyệt lại.
+  const isReturnedAdjust = pakd.status === 'RETURNED' && pakd.locked;
+  const canAdjustPlan = (pakd.status === 'COMPLETED' || isReturnedAdjust) && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
 
   // Trạng thái đơn đang ở đâu & người duyệt tiếp theo
   const nextApprover = (() => {
@@ -540,7 +543,7 @@ const DetailView: React.FC<{
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
           {/* Điều chỉnh trực tiếp phương án sau khi hoàn tất (ghi log cũ → mới, không dùng version) */}
           {canAdjustPlan && !adjustMode && (
-            <button onClick={() => { setAdjustReason(''); setReasonOpen(true); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiếu điều chỉnh</button>
+            <button onClick={() => { setAdjustReason(isReturnedAdjust ? (pakd.pendingAdjustReason || '') : ''); setReasonOpen(true); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />{isReturnedAdjust ? 'Sửa lại & gửi duyệt' : 'Tạo phiếu điều chỉnh'}</button>
           )}
           {adjustMode && (
             <>
