@@ -11,6 +11,7 @@ import {
 import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, makePhases, khCode,
 } from './projectData';
+import { BodDashboard, countAlerts } from './BodDashboard';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
@@ -20,7 +21,7 @@ import {
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
 } from './projectWorkflow';
 
-type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT';
+type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
@@ -184,6 +185,7 @@ export const ProjectsPage: React.FC = () => {
         <>
           {/* Module tabs */}
           <div className="flex border-b border-gray-200 mb-4">
+            {['BOD', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard BOD" count={countAlerts(pakds)} active={moduleTab === 'DASHBOARD'} onClick={() => setModuleTab('DASHBOARD')} />}
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
             <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
@@ -191,6 +193,7 @@ export const ProjectsPage: React.FC = () => {
             <ModTab label="Nhật ký hệ thống" active={moduleTab === 'AUDIT'} onClick={() => setModuleTab('AUDIT')} />
           </div>
 
+          {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
           )}
