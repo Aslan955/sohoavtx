@@ -149,6 +149,7 @@ const RAW_PAKDS: Pakd[] = [
       },
     ],
     approvalHistory: [
+      { id: 'AR0', stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor: 'Lê Thu Trang', action: 'SUBMIT', comment: 'AM nộp phương án vào hàng đợi phê duyệt.', oldStatus: 'DRAFT', newStatus: 'PENDING_SALES_DIRECTOR', createdAt: '2026-05-11 08:15' },
       { id: 'AR1', stepLabel: 'Chờ GĐ Khối', role: 'BUSINESS_DIRECTOR', actor: 'Nguyễn Tiến Dũng', action: 'APPROVE', comment: 'Thông qua, hiệu quả đầu tư tốt.', oldStatus: 'PENDING_BUSINESS_DIRECTOR', newStatus: 'PENDING_BOD', createdAt: '2026-05-12 14:20' },
       { id: 'AR2', stepLabel: 'Chờ BOD', role: 'BOD', actor: 'Phạm Minh Hải', action: 'APPROVE', comment: 'Phê duyệt.', oldStatus: 'PENDING_BOD', newStatus: 'PENDING_ACCOUNTANT', createdAt: '2026-05-14 11:00' },
       { id: 'AR3', stepLabel: 'Chờ Kế toán', role: 'ACCOUNTANT', actor: 'Lê Thị Mai', action: 'APPROVE', comment: 'Ngân sách hợp lệ.', oldStatus: 'PENDING_ACCOUNTANT', newStatus: 'PENDING_IT', createdAt: '2026-05-15 16:45' },
@@ -208,6 +209,7 @@ const RAW_PAKDS: Pakd[] = [
       },
     ],
     approvalHistory: [
+      { id: 'AR0', stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor: 'Lê Thu Trang', action: 'SUBMIT', comment: 'AM nộp phương án vào hàng đợi phê duyệt.', oldStatus: 'DRAFT', newStatus: 'PENDING_SALES_DIRECTOR', createdAt: '2026-06-16 08:00' },
       { id: 'AR1', stepLabel: 'Chờ GĐ Khối', role: 'BUSINESS_DIRECTOR', actor: 'Nguyễn Tiến Dũng', action: 'APPROVE', comment: 'Thông qua, chuyển BOD.', oldStatus: 'PENDING_BUSINESS_DIRECTOR', newStatus: 'PENDING_BOD', createdAt: '2026-06-18 10:45' },
     ],
     changeRequests: [],
@@ -249,6 +251,7 @@ const RAW_PAKDS: Pakd[] = [
       },
     ],
     approvalHistory: [
+      { id: 'AR0', stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor: 'Lê Thu Trang', action: 'SUBMIT', comment: 'AM nộp phương án vào hàng đợi phê duyệt.', oldStatus: 'DRAFT', newStatus: 'PENDING_SALES_DIRECTOR', createdAt: '2026-06-22 09:30' },
       { id: 'AR1', stepLabel: 'Chờ GĐ Khối', role: 'BUSINESS_DIRECTOR', actor: 'Nguyễn Tiến Dũng', action: 'APPROVE', comment: 'Thông qua, đã sinh mã.', oldStatus: 'PENDING_BUSINESS_DIRECTOR', newStatus: 'PENDING_BOD', createdAt: '2026-06-23 09:30' },
       { id: 'AR2', stepLabel: 'Chờ BOD', role: 'BOD', actor: 'Phạm Minh Hải', action: 'APPROVE', comment: 'Phê duyệt, chuyển Kế toán thẩm định.', oldStatus: 'PENDING_BOD', newStatus: 'PENDING_ACCOUNTANT', createdAt: '2026-06-24 10:00' },
     ],
@@ -294,6 +297,7 @@ const RAW_PAKDS: Pakd[] = [
       },
     ],
     approvalHistory: [
+      { id: 'AR0', stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor: 'Lê Thu Trang', action: 'SUBMIT', comment: 'AM nộp phương án vào hàng đợi phê duyệt.', oldStatus: 'DRAFT', newStatus: 'PENDING_SALES_DIRECTOR', createdAt: '2026-06-24 14:30' },
       { id: 'AR1', stepLabel: 'Chờ GĐ Khối', role: 'BUSINESS_DIRECTOR', actor: 'Nguyễn Tiến Dũng', action: 'APPROVE', comment: 'Thông qua.', oldStatus: 'PENDING_BUSINESS_DIRECTOR', newStatus: 'PENDING_BOD', createdAt: '2026-06-25 09:00' },
       { id: 'AR2', stepLabel: 'Chờ BOD', role: 'BOD', actor: 'Phạm Minh Hải', action: 'APPROVE', comment: 'Đồng ý.', oldStatus: 'PENDING_BOD', newStatus: 'PENDING_ACCOUNTANT', createdAt: '2026-06-25 11:00' },
       { id: 'AR3', stepLabel: 'Chờ Kế toán', role: 'ACCOUNTANT', actor: 'Lê Thị Mai', action: 'APPROVE', comment: 'Ngân sách hợp lệ, chuyển IT tạo dự án Jira.', oldStatus: 'PENDING_ACCOUNTANT', newStatus: 'PENDING_IT', createdAt: '2026-06-26 15:00' },

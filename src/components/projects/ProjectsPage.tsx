@@ -604,7 +604,7 @@ const DetailView: React.FC<{
           <table className="w-full text-[11px] border-collapse">
             <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th>Bước</Th><Th w="140px">Người duyệt</Th><Th w="90px" center>Kết quả</Th><Th>Ý kiến</Th><Th w="120px">Thời gian</Th></tr></thead>
             <tbody>{pakd.approvalHistory.map(a => (
-              <tr key={a.id} className="border-b border-gray-100"><Td>{a.stepLabel}</Td><Td>{a.actor} ({a.role})</Td><Td center><span className={a.action === 'APPROVE' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{a.action === 'APPROVE' ? 'Duyệt' : 'Trả lại'}</span></Td><Td><span className="italic text-gray-500">{a.comment}</span></Td><Td muted>{a.createdAt}</Td></tr>
+              <tr key={a.id} className="border-b border-gray-100"><Td>{a.stepLabel}</Td><Td>{a.actor} ({a.role})</Td><Td center><span className={a.action === 'APPROVE' ? 'text-green-600 font-semibold' : a.action === 'SUBMIT' ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'}>{a.action === 'APPROVE' ? 'Duyệt' : a.action === 'SUBMIT' ? 'Nộp' : 'Trả lại'}</span></Td><Td><span className="italic text-gray-500">{a.comment}</span></Td><Td muted>{a.createdAt}</Td></tr>
             ))}</tbody>
           </table>
         </Panel>
@@ -1056,13 +1056,13 @@ const SpentCell: React.FC<{ value: number; over: boolean; onCommit: (v: number) 
 };
 
 // ===================== Lịch sử trao đổi / ý kiến của các thành viên trong luồng =====================
-type FlowEntry = { at: string; author: string; role: UserRole; context: string; action: 'NOTE' | 'APPROVE' | 'REJECT' | 'REVISION'; text: string };
+type FlowEntry = { at: string; author: string; role: UserRole; context: string; action: 'NOTE' | 'APPROVE' | 'REJECT' | 'REVISION' | 'SUBMIT'; text: string };
 const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: string) => void }> = ({ pakd, simUser, onAddComment }) => {
   const [text, setText] = useState('');
   const entries: FlowEntry[] = [];
   (pakd.comments || []).forEach(c => entries.push({ at: c.createdAt, author: c.author, role: c.role, context: 'Ghi chú / Trao đổi', action: 'NOTE', text: c.content }));
   (pakd.planRevisions || []).forEach(r => entries.push({ at: r.at, author: r.by, role: r.role, context: 'Điều chỉnh phương án (mở lại từ đầu)', action: 'REVISION', text: `${r.fromStatus} → Nháp. Lý do: ${r.reason}` }));
-  (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment }));
+  (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: a.action === 'SUBMIT' ? 'Nộp trình duyệt' : `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : a.action === 'SUBMIT' ? 'SUBMIT' : 'REVISION', text: a.comment }));
   pakd.steps.forEach((s, idx) => {
     (s.advanceApprovals || []).forEach(a => entries.push({ at: a.at, author: a.actor, role: a.role, context: `Chuyển giai đoạn ${khCode(idx)}`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment || '' }));
     (s.budgetAdjustments || []).forEach(ba => {
@@ -1074,7 +1074,8 @@ const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: 
   const badge = (e: FlowEntry) => e.action === 'APPROVE' ? <span className="text-[9px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Duyệt</span>
     : e.action === 'REJECT' ? <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">Từ chối</span>
     : e.action === 'REVISION' ? <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Cần bổ sung</span>
-    : <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Ghi chú</span>;
+    : e.action === 'SUBMIT' ? <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Nộp</span>
+    : <span className="text-[9px] font-bold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">Ghi chú</span>;
 
   return (
     <div className="border border-gray-200 rounded">

@@ -66,7 +66,13 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[]): { p
     return { pakd, error: 'PAKD cần có ít nhất 1 bước thực hiện trước khi nộp.' };
   }
   const old = pakd.status;
-  const updated: Pakd = { ...pakd, status: 'PENDING_SALES_DIRECTOR' };
+  // Ghi mốc "AM nộp trình duyệt" vào lịch sử phê duyệt để hiển thị đủ luồng từ AM → BOD.
+  const submitRecord: ApprovalRecord = {
+    id: rid('AR'), stepLabel: 'AM (Người lập) nộp trình duyệt', role: 'SALE', actor, action: 'SUBMIT',
+    comment: old === 'RETURNED' ? 'AM chỉnh sửa & nộp lại sau khi bị trả lại.' : 'AM nộp phương án vào hàng đợi phê duyệt.',
+    oldStatus: old, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: nowStr(),
+  };
+  const updated: Pakd = { ...pakd, status: 'PENDING_SALES_DIRECTOR', approvalHistory: [submitRecord, ...pakd.approvalHistory] };
   pushAudit(log, updated, actor, 'SALE', 'Nộp PAKD trình duyệt', old, updated.status, 'AM nộp PAKD vào hàng đợi phê duyệt Giám đốc Kinh doanh.');
   return { pakd: updated };
 }

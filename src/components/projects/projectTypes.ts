@@ -71,7 +71,7 @@ export interface ApprovalRecord {
   stepLabel: string;
   role: UserRole;
   actor: string;
-  action: ApprovalAction;
+  action: ApprovalAction | 'SUBMIT'; // SUBMIT = AM nộp trình duyệt (mốc mở đầu luồng)
   comment: string;
   oldStatus: string;
   newStatus: string;
