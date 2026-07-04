@@ -490,6 +490,19 @@ const DetailView: React.FC<{
   };
   const canAdjustPlan = pakd.status === 'COMPLETED' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
 
+  // Trạng thái đơn đang ở đâu & người duyệt tiếp theo
+  const nextApprover = (() => {
+    if (pakd.status === 'COMPLETED') return 'Đã hoàn tất — không còn bước duyệt';
+    if (pakd.status === 'DRAFT') return 'Chưa nộp — người lập đang soạn thảo';
+    if (pakd.status === 'RETURNED') return 'Chờ người lập chỉnh sửa & nộp lại';
+    const role = PAKD_PENDING_ROLE[pakd.status];
+    if (!role) return '—';
+    const byRole = SYSTEM_USERS.find(u => u.role === role)?.fullName;
+    const name = role === 'SALES_DIRECTOR' ? (pakd.salesDirector || byRole)
+      : role === 'BUSINESS_DIRECTOR' ? (pakd.businessDirector || byRole) : byRole;
+    return name ? `${name} (${ROLE_LABEL[role]})` : ROLE_LABEL[role];
+  })();
+
   // Thông tin dự án sản xuất được nhập ở KH02. Chỉ chặn chuyển giai đoạn khi đang ở KH02 mà chưa nhập đủ.
   const kh02 = pakd.steps[1];
   const kh02InfoComplete = !!(kh02?.productionInfo?.projectManager && kh02?.productionInfo?.startDate && kh02?.productionInfo?.endDate);
@@ -563,9 +576,15 @@ const DetailView: React.FC<{
             <h2 className="text-sm font-bold text-gray-900">{pakd.name}</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">Mã PAKD <b className="text-blue-600">{pakd.id}</b> • Phiên bản v{pakd.version} • Người lập: {pakd.creator}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {pakd.locked && <span className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold px-2 py-1 rounded"><Lock size={11} />ĐÃ KHÓA CHI PHÍ</span>}
-            <PakdStatusCell status={pakd.status} />
+          <div className="flex flex-col items-end gap-1 text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Trạng thái đơn:</span>
+              <PakdStatusCell status={pakd.status} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Người duyệt tiếp theo:</span>
+              <span className="font-semibold text-gray-800">{nextApprover}</span>
+            </div>
           </div>
         </div>
 
