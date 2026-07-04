@@ -349,6 +349,7 @@ const DetailView: React.FC<{
   const canEditSpent = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role);
   const [decision, setDecision] = useState('');
   const [draftSaved, setDraftSaved] = useState(false); // xác nhận đã lưu nháp
+  const [restartConfirm, setRestartConfirm] = useState(false); // popup xác nhận "làm lại từ đầu"
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
@@ -475,7 +476,7 @@ const DetailView: React.FC<{
           <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Ý kiến / lý do (tùy chọn)..." className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => { onDecide('APPROVE', decision); setDecision(''); }} className={Btn.green}><Check size={13} className="mr-1" />Duyệt</button>
-            <button onClick={() => { if (window.confirm('Trả PAKD về người lập để LÀM LẠI TỪ ĐẦU và duyệt lại từ bước đầu?')) { onDecide('RESTART', decision); setDecision(''); } }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><RotateCcw size={13} className="mr-1" />Làm lại từ đầu</button>
+            <button onClick={() => setRestartConfirm(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><RotateCcw size={13} className="mr-1" />Làm lại từ đầu</button>
             <button onClick={() => { onDecide('REJECT', decision); setDecision(''); }} className={Btn.red}><Ban size={13} className="mr-1" />Từ chối</button>
           </div>
         </div>
@@ -680,6 +681,26 @@ const DetailView: React.FC<{
         <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} simUser={simUser} locked={pakd.locked} onClose={() => setHistIdx(null)}
           onCreate={(after, reason) => onCreateBudgetAdj(pakd.steps[histIdx].id, after, reason)}
           onDecide={(adjId, action, comment) => onDecideBudgetAdj(pakd.steps[histIdx].id, adjId, action, comment)} />
+      )}
+
+      {/* Popup xác nhận "Làm lại từ đầu" */}
+      {restartConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setRestartConfirm(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200">
+              <span className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><RotateCcw size={16} /></span>
+              <h3 className="text-sm font-bold text-gray-800">Xác nhận làm lại từ đầu</h3>
+            </div>
+            <div className="px-5 py-4 text-[13px] text-gray-600 space-y-2">
+              <p>Bạn có chắc chắn yêu cầu <b className="text-orange-600">làm lại từ đầu</b> không?</p>
+              <p className="text-[12px] text-gray-500">PAKD sẽ được trả về <b>người lập</b> để chỉnh sửa và phải <b>duyệt lại từ bước đầu</b> của luồng.</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
+              <button onClick={() => setRestartConfirm(false)} className={Btn.ghost}>Hủy</button>
+              <button onClick={() => { onDecide('RESTART', decision); setDecision(''); setRestartConfirm(false); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><Check size={13} className="mr-1" />Xác nhận làm lại từ đầu</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
