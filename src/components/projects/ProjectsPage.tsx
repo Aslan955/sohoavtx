@@ -573,15 +573,18 @@ const DetailView: React.FC<{
             const activeSnap = verTab !== 'cur' ? pastVers.find(r => r.version === verTab) : null;
             return (
             <div className="p-4 space-y-4">
-              {/* Tab phiên bản phương án: V1 (đã duyệt) ... V{n} (hiện tại) */}
-              {pastVers.length > 0 && (
-                <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
-                  {pastVers.map(r => (
-                    <button key={r.version} onClick={() => setVerTab(r.version)} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === r.version ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{r.version} <span className="opacity-70">(đã chốt)</span></button>
-                  ))}
-                  <button onClick={() => setVerTab('cur')} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === 'cur' ? 'bg-[#007bff] text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{pakd.version} <span className="opacity-80">({PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]})</span></button>
-                </div>
-              )}
+              {/* Tab phiên bản phương án (trái) + Tổng hợp ngân sách (phải) */}
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                {pastVers.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
+                    {pastVers.map(r => (
+                      <button key={r.version} onClick={() => setVerTab(r.version)} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === r.version ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{r.version} <span className="opacity-70">(đã chốt)</span></button>
+                    ))}
+                    <button onClick={() => setVerTab('cur')} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === 'cur' ? 'bg-[#007bff] text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{pakd.version} <span className="opacity-80">({PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]})</span></button>
+                  </div>
+                ) : <div />}
+                {!activeSnap && <BudgetSummaryBar steps={pakd.steps} />}
+              </div>
 
               {activeSnap ? (
                 <SnapshotTable snap={activeSnap.snapshot} versionLabel={`V${activeSnap.version}`} by={activeSnap.by} at={activeSnap.at} />
@@ -713,6 +716,34 @@ const CommentPanel: React.FC<{ comments: PakdComment[]; onAdd: (content: string)
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">{children}</h3>
 );
+
+// Khối tổng hợp ngân sách của toàn phương án (tổng xin / đã chi / vượt / % chi phí)
+const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
+  const totalBudget = steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
+  const totalSpent = steps.reduce((s, st) => s + (st.actualSpent || 0), 0);
+  const pct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+  const over = totalSpent > totalBudget && totalBudget > 0;
+  return (
+    <div className="flex flex-wrap items-stretch gap-2 text-[11px]">
+      <div className="border border-blue-200 bg-blue-50/60 rounded px-3 py-1.5 min-w-[150px]">
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Tổng ngân sách đã xin</p>
+        <p className="text-sm font-bold text-blue-700">{fmtFull(totalBudget)}</p>
+      </div>
+      <div className="border border-amber-200 bg-amber-50/60 rounded px-3 py-1.5 min-w-[150px]">
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Tổng ngân sách đã chi</p>
+        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</p>
+      </div>
+      <div className={`border rounded px-3 py-1.5 min-w-[130px] ${over ? 'border-red-200 bg-red-50/60' : 'border-green-200 bg-green-50/60'}`}>
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Vượt ngân sách?</p>
+        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-green-600'}`}>{over ? 'Đã vượt' : 'Trong ngân sách'}</p>
+      </div>
+      <div className={`border rounded px-3 py-1.5 min-w-[120px] ${over ? 'border-red-200 bg-red-50/60' : 'border-gray-200 bg-gray-50'}`}>
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">% Chi phí / NS</p>
+        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-gray-700'}`}>{totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'}</p>
+      </div>
+    </div>
+  );
+};
 const CodeBox: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="bg-white border border-blue-200 rounded px-3 py-2">
     <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
