@@ -81,7 +81,7 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[], role
 // Các đuôi mã bị loại trừ (2 chữ số cuối) — không cấp cho mã dự án.
 const EXCLUDED_CODE_SUFFIXES = [49, 53];
 
-function generateCodes(pakd: Pakd): Pick<Pakd, 'masterCode' | 'businessCode' | 'productionCode'> {
+export function generateCodes(pakd: Pakd): Pick<Pakd, 'masterCode' | 'businessCode' | 'productionCode'> {
   let seq = Math.floor(100 + Math.random() * 899);
   // Bỏ qua các mã có đuôi (2 chữ số cuối) nằm trong danh sách loại trừ.
   while (EXCLUDED_CODE_SUFFIXES.includes(seq % 100)) {
@@ -127,11 +127,11 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction |
   updated.status = next;
   record.newStatus = next;
 
-  // GĐ Khối duyệt -> sinh 3 mã + khóa chi phí
-  if (pakd.status === 'PENDING_BUSINESS_DIRECTOR' && !updated.masterCode) {
-    const codes = generateCodes(updated);
+  // GĐ Khối duyệt -> khóa chi phí (mã dự án đã sinh khi tạo; sinh bù nếu dữ liệu cũ chưa có)
+  if (pakd.status === 'PENDING_BUSINESS_DIRECTOR' && !updated.locked) {
+    const codes = updated.masterCode ? {} : generateCodes(updated);
     updated = { ...updated, ...codes, locked: true };
-    pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Sinh mã & khóa chi phí', old, next, `Mã tổng ${codes.masterCode}, Mã KD ${codes.businessCode}, Mã SX ${codes.productionCode}. Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
+    pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Khóa chi phí', old, next, `Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }
 
   // BOD duyệt (-> COMPLETED) -> hệ thống tự tạo dự án Jira & xóa lý do điều chỉnh đang chờ

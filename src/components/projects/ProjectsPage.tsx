@@ -14,7 +14,7 @@ import {
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
-  openOutsourceCode, hasOpenChangeRequest, rid,
+  openOutsourceCode, hasOpenChangeRequest, rid, generateCodes,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent,
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
@@ -611,7 +611,7 @@ const DetailView: React.FC<{
 
         {/* Project codes (sinh sau khi GĐ Khối duyệt) */}
         <div className="px-4 py-3 border-b border-gray-200 bg-blue-50/40">
-          <SectionTitle>Mã dự án (sinh tự động khi Giám đốc Khối duyệt)</SectionTitle>
+          <SectionTitle>Mã dự án (sinh tự động khi tạo dự án)</SectionTitle>
           {pakd.masterCode ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-white border border-blue-200 rounded px-3 py-2">
@@ -646,7 +646,7 @@ const DetailView: React.FC<{
               )}
             </div>
           ) : (
-            <p className="text-[11px] text-gray-500 italic">Chưa cấp mã. Mã tổng / kinh doanh / sản xuất sẽ được sinh tự động ngay khi Giám đốc Khối phê duyệt PAKD.</p>
+            <p className="text-[11px] text-gray-500 italic">Chưa cấp mã. Mã tổng / kinh doanh / sản xuất được sinh tự động ngay khi tạo dự án.</p>
           )}
         </div>
 
@@ -2073,12 +2073,15 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
     e.preventDefault();
     if (!f.name.trim() || !f.customerName.trim() || !f.businessDirector.trim()) { setErr('Cần nhập Tên dự án, Tên khách hàng và Giám đốc khối.'); return; }
     if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
+    // Mã dự án sinh tự động ngay khi tạo (không chờ GĐ Khối duyệt)
+    const codes = generateCodes({} as Pakd);
     onCreate({
       id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
       customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
       businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
+      ...codes,
       tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
     });
