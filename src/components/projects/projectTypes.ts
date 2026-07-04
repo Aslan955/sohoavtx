@@ -185,11 +185,12 @@ export interface PlanStepSnap {
 // Log một thay đổi trên phương án khi điều chỉnh trực tiếp (sau khi PAKD hoàn tất) — lưu dữ liệu cũ → mới.
 export interface PlanChangeLog {
   id: string;
+  version: number;  // phiên bản điều chỉnh (Ver 1, Ver 2...) — mỗi lần gửi duyệt điều chỉnh là 1 phiên bản
   at: string;
   by: string;
   role: UserRole;
   reason: string;   // lý do điều chỉnh (bắt buộc nhập khi tạo phiếu)
-  stepCode: string; // KH01.. hoặc '' nếu ở cấp phương án
+  stepCode: string; // KH01.. hoặc 'Chung' nếu ở cấp phương án
   field: string;    // tên trường bị đổi (Mục tiêu, NS Kinh doanh...)
   before: string;   // giá trị cũ (đã định dạng)
   after: string;    // giá trị sau thay đổi (đã định dạng)

@@ -475,7 +475,7 @@ const DetailView: React.FC<{
   const rmTask = (sid: string, tid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).filter(t => t.id !== tid) } : s) }));
   const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
 
-  // ----- Điều chỉnh trực tiếp phương án sau khi hoàn tất (không quản lý version, chỉ ghi log cũ → mới) -----
+  // ----- Điều chỉnh trực tiếp phương án sau khi hoàn tất — mỗi lần gửi duyệt là 1 phiên bản (Ver), ghi log cũ → mới -----
   // Bấm "Tạo phiếu điều chỉnh" → mở popup nhập lý do; xác nhận mới vào chế độ sửa.
   const confirmAdjustReason = () => {
     if (!adjustReason.trim()) return;
@@ -497,9 +497,11 @@ const DetailView: React.FC<{
       { key: 'objective', label: 'Mục tiêu' }, { key: 'output', label: 'Kết quả đầu ra' },
       { key: 'businessBudget', label: 'NS Kinh doanh', money: true }, { key: 'productionBudget', label: 'NS Sản xuất', money: true },
     ];
+    // Số phiên bản điều chỉnh tiếp theo (Ver 1, Ver 2...): mỗi lần gửi duyệt là 1 version
+    const nextVersion = Math.max(0, ...(pakd.planChangeLogs || []).map(l => l.version || 0)) + 1;
     const logs: PlanChangeLog[] = [];
     const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
-      ({ id: rid('LOG'), at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
+      ({ id: rid('LOG'), version: nextVersion, at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
     // Diff thông tin chung của dự án (mã KH, tên KH, domain, PM, tiến độ, doanh thu, chi phí dự kiến)
     if (adjustInfoSnapshot) {
       const cur = infoSnap(pakd);
@@ -539,8 +541,8 @@ const DetailView: React.FC<{
       const reason = adjustReason.trim();
       // Điều chỉnh xong → nộp lại vào luồng duyệt từ bước đầu; ghi mốc & lý do vào lịch sử phê duyệt.
       const submitRec: ApprovalRecord = {
-        id: rid('AR'), stepLabel: 'Điều chỉnh phương án — nộp duyệt lại', role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
-        comment: `Điều chỉnh phương án${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
+        id: rid('AR'), stepLabel: `Điều chỉnh phương án Ver ${nextVersion} — nộp duyệt lại`, role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
+        comment: `Điều chỉnh phương án Ver ${nextVersion}${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
         oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
       };
       setPakd(p => ({
@@ -1334,28 +1336,45 @@ const BudgetHistoryModal: React.FC<{
             )}
           </div>
 
-          {/* Lịch sử điều chỉnh phương án (dữ liệu cũ → mới) của giai đoạn này */}
+          {/* Lịch sử điều chỉnh phương án (dữ liệu cũ → mới) của giai đoạn này — nhóm theo phiên bản (Ver) */}
           <div className="border-t border-gray-200 pt-3">
             <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5"><FileEdit size={12} className="text-orange-600" />Lịch sử điều chỉnh phương án ({phaseCode})</p>
             {changeLogs.length === 0 ? (
               <p className="text-[11px] text-gray-400 italic">Chưa có điều chỉnh nào ở giai đoạn này.</p>
-            ) : (
-              <table className="w-full text-[11px] border-collapse border border-gray-200">
-                <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="120px">Thời gian</Th><Th w="130px">Người điều chỉnh</Th><Th w="140px">Lý do</Th><Th w="110px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Sau thay đổi</Th></tr></thead>
-                <tbody>
-                  {changeLogs.map(l => (
-                    <tr key={l.id} className="border-b border-gray-100 align-top">
-                      <Td muted mono>{l.at}</Td>
-                      <Td>{l.by} <span className="text-gray-400">({ROLE_LABEL[l.role] || l.role})</span></Td>
-                      <Td><span className="italic text-gray-600">{l.reason || '—'}</span></Td>
-                      <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
-                      <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
-                      <Td><span className="whitespace-pre-wrap text-green-700 font-medium">{l.after}</span></Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            ) : (() => {
+              // Gom theo version, hiển thị mới nhất trước
+              const versions = Array.from(new Set(changeLogs.map(l => l.version || 1))).sort((a: number, b: number) => b - a);
+              return (
+                <div className="space-y-3">
+                  {versions.map(ver => {
+                    const rows = changeLogs.filter(l => l.version === ver);
+                    const head = rows[0];
+                    return (
+                      <div key={ver} className="border border-gray-200 rounded overflow-hidden">
+                        <div className="bg-orange-50 border-b border-orange-200 px-3 py-1.5 flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold text-white bg-orange-600 rounded px-1.5 py-0.5">Ver {ver}</span>
+                          <span className="text-[11px] text-gray-600">{head.at} • {head.by} <span className="text-gray-400">({ROLE_LABEL[head.role] || head.role})</span></span>
+                          <span className="text-[11px] text-gray-500 italic">— Lý do: {head.reason || '—'}</span>
+                          <span className="ml-auto text-[10px] text-gray-400">{rows.length} thay đổi</span>
+                        </div>
+                        <table className="w-full text-[11px] border-collapse">
+                          <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="150px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Sau thay đổi</Th></tr></thead>
+                          <tbody>
+                            {rows.map(l => (
+                              <tr key={l.id} className="border-b border-gray-100 align-top">
+                                <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
+                                <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
+                                <Td><span className="whitespace-pre-wrap text-green-700 font-medium">{l.after}</span></Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1894,10 +1913,16 @@ const PhaseTable: React.FC<{
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   <Td center>
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => onShowHistory(i)} title="Lịch sử điều chỉnh ngân sách" className="relative p-1 text-blue-600 hover:bg-blue-100 rounded">
-                        <History size={13} />
-                        {(s.budgetAdjustments?.length || 0) > 0 && <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{s.budgetAdjustments!.length}</span>}
-                      </button>
+                      {(() => {
+                        const changeCount = (pakd.planChangeLogs || []).filter(l => l.stepCode === khCode(i)).length;
+                        const verCount = new Set((pakd.planChangeLogs || []).filter(l => l.stepCode === khCode(i)).map(l => l.version)).size;
+                        return (
+                          <button onClick={() => onShowHistory(i)} title={changeCount > 0 ? `${changeCount} thay đổi qua ${verCount} phiên bản — xem lịch sử` : 'Lịch sử điều chỉnh & chi thực tế'} className="relative p-1 text-blue-600 hover:bg-blue-100 rounded">
+                            <History size={13} />
+                            {changeCount > 0 && <span className="absolute -top-1 -right-1 bg-orange-600 text-white text-[8px] font-bold rounded-full min-w-[14px] h-3.5 px-0.5 flex items-center justify-center">{changeCount}</span>}
+                          </button>
+                        );
+                      })()}
                       {editable && steps.length > 1 && <button onClick={() => { if (window.confirm(`Xóa giai đoạn ${khCode(i)} — ${s.name}?`)) onRmPhase(i); }} title="Xóa giai đoạn" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>}
                     </div>
                   </Td>
