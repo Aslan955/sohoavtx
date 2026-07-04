@@ -36,6 +36,24 @@ const ROLE_LABEL: Record<string, string> = {
 const fmtB = (v: number) => `${(v / 1000000000).toFixed(2)} tỷ`;
 const fmtFull = (v: number) => v.toLocaleString('vi-VN') + ' đ';
 
+// Ô nhập số có dấu phân cách hàng nghìn ngay khi gõ (lưu về số nguyên, không âm)
+const NumberInput: React.FC<{
+  value: number; onChange: (v: number) => void; className?: string; placeholder?: string; title?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}> = ({ value, onChange, className, placeholder, title, onKeyDown }) => {
+  const fmt = (n: number) => (n ? n.toLocaleString('vi-VN') : '');
+  const [text, setText] = React.useState(fmt(value));
+  React.useEffect(() => {
+    const cur = Number(text.replace(/[^\d]/g, '')) || 0;
+    if (cur !== value) setText(fmt(value));
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <input type="text" inputMode="numeric" title={title} placeholder={placeholder} value={text} onKeyDown={onKeyDown}
+      onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, ''); const n = raw ? Number(raw) : 0; setText(raw ? n.toLocaleString('vi-VN') : ''); onChange(n); }}
+      className={className} />
+  );
+};
+
 // Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
 const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
 // Giai đoạn hiện tại của 1 PAKD = max(giá trị đã lưu, KH xa nhất đã có thông tin).
@@ -1064,16 +1082,16 @@ const CostTable: React.FC<{
                 {editable ? <Td><input value={c.name} onChange={(e) => onUpd(c.id, { name: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td> : <Td>{c.name}</Td>}
                 {editable ? <Td><select value={c.costType} onChange={(e) => onUpd(c.id, { costType: e.target.value })} className="w-full border border-gray-200 rounded px-1 py-1 outline-none">{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select></Td> : <Td muted>{c.costType}</Td>}
                 {/* V1 - lần đầu */}
-                {editable ? <Td right><input type="number" value={c.amount} onChange={(e) => onUpd(c.id, { amount: Number(e.target.value) })} className="w-full border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /></Td> : <Td right><b>{fmtFull(c.amount)}</b></Td>}
+                {editable ? <Td right><NumberInput value={c.amount} onChange={(v) => onUpd(c.id, { amount: v })} className="w-full border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /></Td> : <Td right><b>{fmtFull(c.amount)}</b></Td>}
                 {/* V2, V3... - các lần điều chỉnh */}
                 {Array.from({ length: costVersions }, (_, k) => {
                   const va = c.versionAmounts?.[k] || 0;
                   return editable
-                    ? <Td key={k} right><input type="number" value={va} onChange={(e) => { const arr = [...(c.versionAmounts || [])]; while (arr.length < costVersions) arr.push(0); arr[k] = Number(e.target.value); onUpd(c.id, { versionAmounts: arr }); }} className="w-full border border-purple-200 bg-purple-50/40 rounded px-1.5 py-1 text-right outline-none focus:border-purple-400" /></Td>
+                    ? <Td key={k} right><NumberInput value={va} onChange={(nv) => { const arr = [...(c.versionAmounts || [])]; while (arr.length < costVersions) arr.push(0); arr[k] = nv; onUpd(c.id, { versionAmounts: arr }); }} className="w-full border border-purple-200 bg-purple-50/40 rounded px-1.5 py-1 text-right outline-none focus:border-purple-400" /></Td>
                     : <Td key={k} right>{va ? <b className="text-purple-700">{fmtFull(va)}</b> : <span className="text-gray-300">—</span>}</Td>;
                 })}
                 {/* Kế toán duyệt chi */}
-                {actualEditable ? <Td right><input type="number" value={approvedC} onChange={(e) => onUpd(c.id, { actualAmount: Number(e.target.value) })} className="w-full border border-amber-300 bg-amber-50 rounded px-1.5 py-1 text-right outline-none focus:border-amber-500" /></Td>
+                {actualEditable ? <Td right><NumberInput value={approvedC} onChange={(v) => onUpd(c.id, { actualAmount: v })} className="w-full border border-amber-300 bg-amber-50 rounded px-1.5 py-1 text-right outline-none focus:border-amber-500" /></Td>
                   : <Td right>{approvedC ? <span className={d > 0 ? 'text-red-600 font-semibold' : 'font-semibold'}>{fmtFull(approvedC)}</span> : <span className="text-gray-300">—</span>}</Td>}
                 {editable && <Td center><button onClick={() => onRm(c.id)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button></Td>}
               </tr>
@@ -1091,7 +1109,7 @@ const CostTable: React.FC<{
             <tr className="bg-gray-50/60">
               <Td><input value={cf.name} onChange={(e) => setCf({ ...cf, name: e.target.value })} placeholder="Tên khoản chi phí" className="w-full border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-400" /></Td>
               <Td><select value={cf.costType} onChange={(e) => setCf({ ...cf, costType: e.target.value })} className="w-full border border-gray-200 rounded px-1 py-1 outline-none">{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select></Td>
-              <Td right><input type="number" value={cf.amount} onChange={(e) => setCf({ ...cf, amount: Number(e.target.value) })} placeholder="0" className="w-full border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /></Td>
+              <Td right><NumberInput value={cf.amount} onChange={(v) => setCf({ ...cf, amount: v })} placeholder="0" className="w-full border border-gray-200 rounded px-1.5 py-1 text-right outline-none focus:border-blue-400" /></Td>
               {Array.from({ length: costVersions }, (_, k) => <Td key={k}></Td>)}
               <Td right><span className="text-gray-300 text-[10px]">KT duyệt sau</span></Td>
               <Td center><button onClick={() => { if (cf.name.trim()) { onAdd(cf); setCf({ name: '', costType: COST_TYPES[0], amount: 0 }); } }} className="bg-[#007bff] text-white rounded p-1 hover:bg-blue-600"><Plus size={13} /></button></Td>
@@ -1109,7 +1127,7 @@ const AllocHeader: React.FC<{ roman: string; title: string; color: string; budge
     <div className="flex items-center gap-2 text-[11px]">
       <span className="text-gray-500">Phân bổ:</span>
       {editable
-        ? <input type="number" value={budget} onChange={(e) => onChange(Number(e.target.value))} className="w-40 border border-gray-300 rounded px-2 py-1 text-right font-bold outline-none focus:border-blue-400" />
+        ? <NumberInput value={budget} onChange={onChange} className="w-40 border border-gray-300 rounded px-2 py-1 text-right font-bold outline-none focus:border-blue-400" />
         : <b className="text-gray-800">{fmtFull(budget)}</b>}
       <span className="text-gray-400">| Đã lập:</span>
       <b className={allocated > budget && budget > 0 ? 'text-red-600' : 'text-gray-700'}>{fmtFull(allocated)}</b>
@@ -1272,12 +1290,11 @@ const BudgetHistoryModal: React.FC<{
 
 // Ô cập nhật chi thực tế — mỗi lần nhập là khoản chi của lần đó (cộng dồn vào tổng)
 const SpentCell: React.FC<{ nextTime: number; onAdd: (inc: number) => void }> = ({ nextTime, onAdd }) => {
-  const [v, setV] = useState('');
-  const n = Number(v) || 0;
-  const add = () => { if (n > 0) { onAdd(n); setV(''); } };
+  const [n, setN] = useState(0);
+  const add = () => { if (n > 0) { onAdd(n); setN(0); } };
   return (
     <div className="flex flex-col gap-1">
-      <input type="number" value={v} onChange={(e) => setV(e.target.value)}
+      <NumberInput value={n} onChange={setN}
         onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
         placeholder="Số tiền lần này"
         className="w-full border border-amber-300 bg-amber-50 rounded px-1.5 py-1 text-right outline-none focus:border-amber-500 font-semibold text-amber-800" />
@@ -1745,8 +1762,8 @@ const PhaseTable: React.FC<{
                   <Td>{editable ? <input type="date" value={s.endDate || ''} onChange={(e) => onUpd(s.id, { endDate: e.target.value })} className={inp} /> : (s.endDate || '—')}</Td>
                   <Td>{editable ? <textarea rows={3} value={s.objective || ''} onChange={(e) => onUpd(s.id, { objective: e.target.value })} className={`${inp} resize-y`} /> : <span className="whitespace-pre-wrap">{s.objective || '—'}</span>}</Td>
                   <Td>{editable ? <textarea rows={3} value={s.output || ''} onChange={(e) => onUpd(s.id, { output: e.target.value })} className={`${inp} resize-y`} /> : <span className="whitespace-pre-wrap">{s.output || '—'}</span>}</Td>
-                  <Td right>{editable ? <input type="number" value={s.productionBudget || 0} onChange={(e) => onUpd(s.id, { productionBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
-                  <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
+                  <Td right>{editable ? <NumberInput value={s.productionBudget || 0} onChange={(v) => onUpd(s.id, { productionBudget: v })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
+                  <Td right>{editable ? <NumberInput value={s.businessBudget || 0} onChange={(v) => onUpd(s.id, { businessBudget: v })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
                   
                   {/* Số tiền lần này: nhập khoản chi mỗi lần, có nút cập nhật */}
@@ -1903,7 +1920,7 @@ const PhaseSheet: React.FC<{
 const NumLbl: React.FC<{ label: string; value: number; editable: boolean; onChange: (v: number) => void; strong?: string }> = ({ label, value, editable, onChange, strong }) => (
   <div className="space-y-1">
     <label className="text-[10px] font-semibold text-gray-400 uppercase">{label}</label>
-    {editable ? <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full text-[11px] border border-gray-200 rounded px-2 py-1.5 text-right outline-none focus:border-blue-400" /> : <p className={`text-[11px] font-bold ${strong || 'text-gray-700'}`}>{fmtFull(value)}</p>}
+    {editable ? <NumberInput value={value} onChange={onChange} className="w-full text-[11px] border border-gray-200 rounded px-2 py-1.5 text-right outline-none focus:border-blue-400" /> : <p className={`text-[11px] font-bold ${strong || 'text-gray-700'}`}>{fmtFull(value)}</p>}
   </div>
 );
 
@@ -2086,8 +2103,8 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="space-y-1"><label className={lab}>Người lập (AM / GĐ Kinh doanh / GĐ Khối)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><input type="number" value={f.expectedContractValue} onChange={(e) => setF({ ...f, expectedContractValue: Number(e.target.value) })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Chi phí dự kiến tối đa (VNĐ)</label><input type="number" value={f.expectedCost} onChange={(e) => setF({ ...f, expectedCost: Number(e.target.value) })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><NumberInput value={f.expectedContractValue} onChange={(v) => setF({ ...f, expectedContractValue: v })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Chi phí dự kiến tối đa (VNĐ)</label><NumberInput value={f.expectedCost} onChange={(v) => setF({ ...f, expectedCost: v })} className={inp} /></div>
           <div className="col-span-2 space-y-1">
             <label className={lab}>Lợi nhuận gộp dự kiến tối thiểu (%)</label>
             {(() => { const p = f.expectedContractValue - f.expectedCost; const m = f.expectedContractValue > 0 ? (p / f.expectedContractValue) * 100 : 0; return (
@@ -2151,7 +2168,7 @@ const ChangeRequestModal: React.FC<{ pakd: Pakd; onClose: () => void; onSubmit: 
               <div className="grid grid-cols-3 gap-2">
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder={op === 'ADD' ? 'Tên khoản mới' : 'Tên mới (trống=giữ)'} className={inp} />
                 {op === 'ADD' && <select value={costType} onChange={(e) => setCostType(e.target.value)} className={inp}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select>}
-                <input type="number" value={newAmount} onChange={(e) => setNewAmount(Number(e.target.value))} placeholder="Số tiền mới" className={inp} />
+                <NumberInput value={newAmount} onChange={setNewAmount} placeholder="Số tiền mới" className={inp} />
               </div>
             )}
             <button onClick={add} className={Btn.ghost}><Plus size={13} className="mr-1" />Thêm vào phiếu</button>
