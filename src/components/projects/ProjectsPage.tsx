@@ -1512,7 +1512,12 @@ const PhaseTable: React.FC<{
                     {canEditSpent
                       ? <SpentCell value={rowActual} over={rowActual > rowTotal && rowTotal > 0} onCommit={(v) => onUpdSpent(s.id, v)} />
                       : <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>}
-                    {(s.spentLog?.length || 0) > 0 && <button onClick={() => onShowHistory(i)} title="Lịch sử chi thực tế" className="ml-1 text-[9px] text-blue-600 hover:underline">({s.spentLog!.length} lần)</button>}
+                    {(s.spentLog?.length || 0) > 0 && (
+                      <button onClick={() => onShowHistory(i)} title="Xem toàn bộ lịch sử chi thực tế" className="block w-full mt-0.5 text-[9px] text-blue-600 hover:underline text-right leading-tight">
+                        Lần {s.spentLog!.length} • {s.spentLog![0].at}
+                        {s.spentLog!.length > 1 && <span className="text-gray-400"> (xem {s.spentLog!.length} lần)</span>}
+                      </button>
+                    )}
                   </Td>
                   <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
