@@ -172,6 +172,7 @@ export interface Pakd {
   comments?: PakdComment[];
   planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
   planChangeLogs?: PlanChangeLog[]; // log điều chỉnh trực tiếp phương án sau khi hoàn tất (cũ → mới)
+  versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
@@ -180,6 +181,15 @@ export interface Pakd {
 export interface PlanStepSnap {
   code: string; name: string; start?: string; end?: string; objective?: string; output?: string;
   biz: number; prod: number; revenue: number;
+}
+
+// Ảnh chụp toàn bộ phương án tại một phiên bản đã chốt (để xem lại read-only).
+export interface PlanVersionSnap {
+  version: number;
+  at: string;
+  by: string;
+  reason?: string; // lý do của lần điều chỉnh tạo ra phiên bản kế tiếp
+  steps: PlanStepSnap[];
 }
 
 // Log một thay đổi trên phương án khi điều chỉnh trực tiếp (sau khi PAKD hoàn tất) — lưu dữ liệu cũ → mới.

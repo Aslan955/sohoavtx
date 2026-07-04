@@ -5,7 +5,7 @@ import {
   Upload, Download, RotateCcw,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog,
+  Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -389,6 +389,7 @@ const DetailView: React.FC<{
   const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
   const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
   const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
+  const [viewVersion, setViewVersion] = useState<number | null>(null); // xem lại 1 phiên bản đã chốt (read-only)
   // Ảnh chụp thông tin chung của dự án (để diff & khôi phục khi điều chỉnh)
   type InfoSnap = { customerCode: string; customerName: string; domain: string; pmName: string; projStart: string; projEnd: string; revenue: number; expectedCost: number };
   const infoSnap = (p: Pakd): InfoSnap => ({ customerCode: p.customerCode, customerName: p.customerName, domain: p.domain || '', pmName: p.pmName || '', projStart: p.projStart || '', projEnd: p.projEnd || '', revenue: p.revenue, expectedCost: p.expectedCost ?? 0 });
@@ -545,10 +546,21 @@ const DetailView: React.FC<{
         comment: `Điều chỉnh phương án V${newVersion}${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
         oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
       };
+      // Đóng băng phiên bản đang bị thay thế (bản đã chốt trước điều chỉnh) để xem lại read-only.
+      // Chỉ tạo snapshot khi điều chỉnh MỚI (không phải nộp lại đơn bị trả).
+      const frozen: PlanVersionSnap | null = !isReturnedAdjust ? {
+        version: pakd.version || 1, at, by: simUser.fullName, reason,
+        steps: (adjustSnapshot || []).map((s, i): PlanStepSnap => ({
+          code: khCode(i), name: s.name, start: s.startDate, end: s.endDate,
+          objective: s.objective, output: s.output,
+          biz: s.businessBudget || 0, prod: s.productionBudget || 0, revenue: s.revenue || 0,
+        })),
+      } : null;
       setPakd(p => ({
         ...p,
         version: newVersion,
         planChangeLogs: [...logs, ...(p.planChangeLogs || [])],
+        versionSnaps: frozen ? [...(p.versionSnaps || []), frozen] : p.versionSnaps,
         status: 'PENDING_SALES_DIRECTOR',
         pendingAdjustReason: reason,
         approvalHistory: [submitRec, ...p.approvalHistory],
@@ -757,34 +769,45 @@ const DetailView: React.FC<{
 
           {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
-              {/* Thanh phiên bản phương án: V1 (đã chốt) ... V(hiện tại) trạng thái */}
+              {/* Thanh phiên bản phương án: V1 (đã chốt) ... V(hiện tại) trạng thái — bấm chip để xem lại */}
               {(pakd.version > 1 || adjustMode) && (() => {
                 const pendingReapproval = !!pakd.pendingAdjustReason && !!PAKD_PENDING_ROLE[pakd.status];
                 const draftVer = isReturnedAdjust ? pakd.version : pakd.version + 1;
-                type Chip = { v: number; label: string; cls: string; pulse?: boolean };
+                const snapVers = new Set((pakd.versionSnaps || []).map(s => s.version));
+                type Chip = { v: number; label: string; cls: string; pulse?: boolean; viewable: boolean; isCurrent: boolean };
                 const chips: Chip[] = [];
                 for (let v = 1; v <= pakd.version; v++) {
                   const isCur = v === pakd.version;
-                  if (!isCur) { chips.push({ v, label: 'đã chốt duyệt', cls: 'bg-gray-100 text-gray-600 border-gray-300' }); continue; }
-                  if (adjustMode && isReturnedAdjust) chips.push({ v, label: 'đang soạn (sửa lại)', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
-                  else if (pendingReapproval) chips.push({ v, label: 'đang xin duyệt lại', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
-                  else if (pakd.status === 'RETURNED') chips.push({ v, label: 'bị trả lại — chờ sửa', cls: 'bg-red-100 text-red-700 border-red-300' });
-                  else if (pakd.status === 'COMPLETED') chips.push({ v, label: 'đã chốt · hiện hành', cls: 'bg-green-100 text-green-700 border-green-400' });
-                  else chips.push({ v, label: 'hiện hành', cls: 'bg-blue-100 text-blue-700 border-blue-300' });
+                  const base = { v, viewable: snapVers.has(v) || isCur, isCurrent: isCur };
+                  if (!isCur) { chips.push({ ...base, label: 'đã chốt duyệt', cls: 'bg-gray-100 text-gray-600 border-gray-300' }); continue; }
+                  if (adjustMode && isReturnedAdjust) chips.push({ ...base, label: 'đang soạn (sửa lại)', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                  else if (pendingReapproval) chips.push({ ...base, label: 'đang xin duyệt lại', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                  else if (pakd.status === 'RETURNED') chips.push({ ...base, label: 'bị trả lại — chờ sửa', cls: 'bg-red-100 text-red-700 border-red-300' });
+                  else if (pakd.status === 'COMPLETED') chips.push({ ...base, label: 'đã chốt · hiện hành', cls: 'bg-green-100 text-green-700 border-green-400' });
+                  else chips.push({ ...base, label: 'hiện hành', cls: 'bg-blue-100 text-blue-700 border-blue-300' });
                 }
-                if (adjustMode && !isReturnedAdjust) chips.push({ v: draftVer, label: 'đang soạn điều chỉnh', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true });
+                if (adjustMode && !isReturnedAdjust) chips.push({ v: draftVer, label: 'đang soạn điều chỉnh', cls: 'bg-orange-100 text-orange-700 border-orange-400', pulse: true, viewable: false, isCurrent: false });
                 return (
                   <div className="flex flex-wrap items-center gap-2 border border-gray-200 rounded bg-gray-50/70 px-3 py-2">
                     <span className="text-[11px] text-gray-500 font-semibold">Phiên bản phương án:</span>
-                    {chips.map((c, i) => (
-                      <React.Fragment key={c.v}>
-                        {i > 0 && <span className="text-gray-300 text-xs">›</span>}
-                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold border rounded px-2 py-0.5 ${c.cls}`}>
-                          {c.pulse && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
-                          V{c.v} · {c.label}
-                        </span>
-                      </React.Fragment>
-                    ))}
+                    {chips.map((c, i) => {
+                      const active = viewVersion === null ? c.isCurrent : viewVersion === c.v;
+                      const clickable = c.viewable && !adjustMode;
+                      return (
+                        <React.Fragment key={c.v}>
+                          {i > 0 && <span className="text-gray-300 text-xs">›</span>}
+                          <button
+                            onClick={() => clickable && setViewVersion(c.isCurrent ? null : c.v)}
+                            disabled={!clickable}
+                            title={clickable ? (c.isCurrent ? 'Xem phiên bản hiện hành' : `Xem lại V${c.v} (đã chốt)`) : undefined}
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold border rounded px-2 py-0.5 ${c.cls} ${clickable ? 'cursor-pointer hover:brightness-95' : 'cursor-default'} ${active && clickable ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}>
+                            {c.pulse && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                            V{c.v} · {c.label}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                    {viewVersion !== null && <button onClick={() => setViewVersion(null)} className="ml-1 text-[11px] text-blue-600 hover:underline">← Về bản hiện hành</button>}
                   </div>
                 );
               })()}
@@ -800,10 +823,16 @@ const DetailView: React.FC<{
                 </div>
               )}
 
-              <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
-                canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
-                onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
+              {(() => {
+                const snap = viewVersion !== null ? (pakd.versionSnaps || []).find(s => s.version === viewVersion) : null;
+                if (snap) return <SnapshotTable snap={snap.steps} versionLabel={`V${snap.version}`} by={snap.by} at={snap.at} />;
+                return (
+                  <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                    canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
+                    onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                    onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
+                );
+              })()}
             </div>
           )}
 
