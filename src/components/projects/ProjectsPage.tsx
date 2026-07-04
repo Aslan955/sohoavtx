@@ -627,17 +627,43 @@ const DetailView: React.FC<{
         </Panel>
       )}
 
-      {/* approval history */}
-      {pakd.approvalHistory.length > 0 && (
-        <Panel title="Lịch sử phê duyệt">
-          <table className="w-full text-[11px] border-collapse">
-            <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th>Bước</Th><Th w="140px">Người duyệt</Th><Th w="90px" center>Kết quả</Th><Th>Ý kiến</Th><Th w="120px">Thời gian</Th></tr></thead>
-            <tbody>{pakd.approvalHistory.map(a => (
-              <tr key={a.id} className="border-b border-gray-100"><Td>{a.stepLabel}</Td><Td>{a.actor} ({a.role})</Td><Td center><span className={a.action === 'APPROVE' ? 'text-green-600 font-semibold' : a.action === 'SUBMIT' ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'}>{a.action === 'APPROVE' ? 'Duyệt' : a.action === 'SUBMIT' ? 'Nộp' : 'Trả lại'}</span></Td><Td><span className="italic text-gray-500">{a.comment}</span></Td><Td muted>{a.createdAt}</Td></tr>
-            ))}</tbody>
-          </table>
-        </Panel>
-      )}
+      {/* approval history — gộp luồng duyệt PAKD gốc + luồng duyệt các phiếu điều chỉnh */}
+      {(() => {
+        type HistRow = { id: string; step: string; who: string; act: string; comment: string; at: string };
+        // Luồng duyệt PAKD gốc
+        const mainRows: HistRow[] = pakd.approvalHistory.map(a => ({ id: a.id, step: a.stepLabel, who: `${a.actor} (${a.role})`, act: a.action, comment: a.comment, at: a.createdAt }));
+        // Luồng duyệt từng phiếu điều chỉnh (cũ → mới)
+        const crList = [...pakd.changeRequests].sort((x, y) => x.createdAt.localeCompare(y.createdAt));
+        const crRows: HistRow[] = crList.flatMap((cr, idx) => {
+          const label = `Phiếu điều chỉnh lần ${idx + 1}`;
+          const created: HistRow = { id: `${cr.id}-c`, step: `${label} — Tạo phiếu`, who: cr.createdBy, act: 'CREATE', comment: `Lý do: ${cr.reason}`, at: cr.createdAt };
+          const appr = cr.approvalHistory.map(a => ({ id: a.id, step: `${label} — ${a.stepLabel}`, who: `${a.actor} (${a.role})`, act: a.action, comment: a.comment, at: a.createdAt }));
+          return [created, ...appr];
+        });
+        const rows = [...mainRows, ...crRows].sort((a, b) => a.at.localeCompare(b.at));
+        const actInfo = (act: string): [string, string] =>
+          act === 'APPROVE' ? ['Duyệt', 'text-green-600'] : act === 'SUBMIT' ? ['Nộp', 'text-blue-600']
+          : act === 'CREATE' ? ['Tạo phiếu', 'text-purple-600'] : ['Trả lại', 'text-red-600'];
+        if (rows.length === 0) return null;
+        return (
+          <Panel title="Lịch sử phê duyệt">
+            <table className="w-full text-[11px] border-collapse">
+              <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th>Bước</Th><Th w="140px">Người thực hiện</Th><Th w="90px" center>Kết quả</Th><Th>Ý kiến</Th><Th w="120px">Thời gian</Th></tr></thead>
+              <tbody>{rows.map(r => {
+                const [label, cls] = actInfo(r.act);
+                const isCr = r.step.startsWith('Phiếu điều chỉnh');
+                return (
+                  <tr key={r.id} className={`border-b border-gray-100 ${isCr ? 'bg-purple-50/40' : ''}`}>
+                    <Td>{r.step}</Td><Td>{r.who}</Td>
+                    <Td center><span className={`${cls} font-semibold`}>{label}</span></Td>
+                    <Td><span className="italic text-gray-500">{r.comment}</span></Td><Td muted>{r.at}</Td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </Panel>
+        );
+      })()}
       </div>
 
       {/* Right column: Trao đổi & Ghi chú */}
