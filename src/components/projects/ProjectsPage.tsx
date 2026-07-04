@@ -326,7 +326,8 @@ const DetailView: React.FC<{
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
-  const canStartEdit = !pakd.editingRole && !!PAKD_PENDING_ROLE[pakd.status] && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
+  // Không cho sửa phương án khi PAKD đang chờ duyệt — chỉ được sửa khi Nháp (DRAFT) hoặc bị Từ chối (RETURNED).
+  const canStartEdit = false;
   const actualEditable = simUser.role === 'ACCOUNTANT' || simUser.role === 'ADMIN'; // Kế toán nhập chi phí thực tế
   const total = pakdTotalCost(pakd);
   const actualTotal = pakdActualCost(pakd);
@@ -1809,7 +1810,10 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded shadow-lg w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
-          <h3 className="font-bold text-sm text-gray-900">Tạo Dự án</h3>
+          <div>
+            <h3 className="font-bold text-sm text-gray-900">Tạo phương án kinh doanh</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Lưu ở dạng <b>nháp</b> — bạn có thể chỉnh sửa tiếp trước khi nộp trình duyệt.</p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
         {err && <p className="text-xs text-red-600 font-medium px-5 pt-3">{err}</p>}
@@ -1835,7 +1839,7 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           </div>
           <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-gray-100 mt-1">
             <button type="button" onClick={onClose} className={Btn.ghost}>Hủy</button>
-            <button type="submit" className={Btn.primary}>Tạo dự án</button>
+            <button type="submit" className={Btn.primary}><FileEdit size={13} className="mr-1.5" />Lưu nháp</button>
           </div>
         </form>
       </div>
