@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
+  Upload, Download,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole,
@@ -359,6 +360,33 @@ const DetailView: React.FC<{
     const currentPhase = Math.min(p.currentPhase || 1, steps.length);
     return { ...p, steps, currentPhase };
   });
+  // Import thông tin các giai đoạn từ file/dán CSV — cập nhật giai đoạn theo thứ tự dòng, dòng dư sẽ thêm giai đoạn mới.
+  const importPhases = (rows: ImportRow[]) => setPakd(p => {
+    const steps = p.steps.map((s, i) => {
+      const r = rows[i];
+      if (!r) return s;
+      return {
+        ...s,
+        name: r.name !== undefined ? r.name : s.name,
+        startDate: r.startDate !== undefined ? r.startDate : s.startDate,
+        endDate: r.endDate !== undefined ? r.endDate : s.endDate,
+        objective: r.objective !== undefined ? r.objective : s.objective,
+        output: r.output !== undefined ? r.output : s.output,
+        productionBudget: r.productionBudget !== undefined ? r.productionBudget : s.productionBudget,
+        businessBudget: r.businessBudget !== undefined ? r.businessBudget : s.businessBudget,
+      };
+    });
+    // Dòng dư → thêm giai đoạn mới (KH tiếp theo)
+    for (let i = p.steps.length; i < rows.length; i++) {
+      const r = rows[i];
+      steps.push({
+        id: khCode(i), order: i + 1, name: r.name || `Giai đoạn ${i + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [],
+        startDate: r.startDate, endDate: r.endDate, objective: r.objective, output: r.output,
+        productionBudget: r.productionBudget, businessBudget: r.businessBudget,
+      });
+    }
+    return { ...p, steps };
+  });
   const addCost = (sid: string, it: Omit<CostItem, 'id'>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: [...s.costItems, { id: rid('CST'), ...it }] } : s) }));
   const updCost = (sid: string, cid: string, patch: Partial<CostItem>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.map(c => c.id === cid ? { ...c, ...patch } : c) } : s) }));
   const rmCost = (sid: string, cid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, costItems: s.costItems.filter(c => c.id !== cid) } : s) }));
@@ -443,30 +471,29 @@ const DetailView: React.FC<{
           <SectionTitle>Mã dự án (sinh tự động khi Giám đốc Khối duyệt)</SectionTitle>
           {pakd.masterCode ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <CodeBox label="Mã tổng" value={pakd.masterCode} />
-                <CodeBox label="Mã kinh doanh" value={pakd.businessCode!} />
-                <CodeBox label="Mã sản xuất" value={pakd.productionCode!} />
-                <div className="bg-white border border-blue-200 rounded px-3 py-2">
-                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length})</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-white border border-blue-200 rounded px-3 py-2">
+                <CodeInline label="Mã tổng" value={pakd.masterCode} />
+                <span className="w-px h-6 bg-blue-100" />
+                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} />
+                <span className="w-px h-6 bg-blue-100" />
+                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} />
+                <span className="w-px h-6 bg-blue-100" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length}):</span>
                   {pakd.outsourceCodes.length === 0 ? (
-                    <p className="text-[11px] text-gray-400 italic mt-0.5">Chưa có</p>
+                    <span className="text-[11px] text-gray-400 italic">Chưa có</span>
                   ) : (
-                    <div className="space-y-1 mt-0.5">
-                      {pakd.outsourceCodes.map(o => (
-                        <div key={o.id} title={o.label}><span className="text-xs font-bold font-mono text-blue-700 tracking-wider">{o.code}</span></div>
+                    <span className="flex flex-wrap items-center gap-y-0.5">
+                      {pakd.outsourceCodes.map((o, i) => (
+                        <React.Fragment key={o.id}>
+                          {i > 0 && <span className="mx-2 text-gray-300">—</span>}
+                          <span title={o.label} className="text-sm font-bold font-mono text-blue-700 tracking-wider">{o.code}</span>
+                        </React.Fragment>
                       ))}
-                    </div>
+                    </span>
                   )}
                 </div>
               </div>
-
-              {pakd.outsourceCodes.length > 0 && (
-                <table className="w-full text-[11px] border-collapse border border-gray-200 rounded">
-                  <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="130px">Mã outsource</Th><Th>Nội dung thuê ngoài</Th></tr></thead>
-                  <tbody>{pakd.outsourceCodes.map(o => (<tr key={o.id} className="border-b border-gray-100"><Td mono><b className="text-blue-700">{o.code}</b></Td><Td>{o.label}</Td></tr>))}</tbody>
-                </table>
-              )}
 
               {simUser.role === 'SALE' && (
                 <div className="flex items-center gap-2">
@@ -532,7 +559,7 @@ const DetailView: React.FC<{
               ) : (
                 <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
                   onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                  onAddPhase={addPhase} onRmPhase={rmPhase} />
+                  onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} />
               )}
             </div>
           ); })()}
@@ -636,6 +663,13 @@ const CodeBox: React.FC<{ label: string; value: string }> = ({ label, value }) =
     <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
     <p className="text-sm font-bold font-mono text-blue-700 tracking-wider">{value}</p>
   </div>
+);
+// Mã hiển thị inline (nhãn + giá trị trên cùng một dòng)
+const CodeInline: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <span className="flex items-center gap-1.5">
+    <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}:</span>
+    <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{value}</span>
+  </span>
 );
 const SheetTab: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
   <button onClick={onClick} className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${active ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
@@ -1235,12 +1269,166 @@ const SnapshotTable: React.FC<{ snap: import('./projectTypes').PlanStepSnap[]; v
   );
 };
 
+// ===================== Import thông tin các giai đoạn (CSV / dán dữ liệu) =====================
+interface ImportRow {
+  name?: string; startDate?: string; endDate?: string; objective?: string; output?: string;
+  productionBudget?: number; businessBudget?: number;
+}
+
+const IMPORT_COLS = ['Giai đoạn', 'Bắt đầu', 'Kết thúc', 'Mục tiêu', 'Kết quả đầu ra', 'NS Sản xuất', 'NS Kinh doanh'];
+
+// Parse 1 dòng CSV (hỗ trợ dấu phẩy hoặc tab, có bọc "..." và "" escape).
+const splitCsvLine = (line: string, delim: string): string[] => {
+  const out: string[] = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === delim) { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(c => c.trim());
+};
+
+// Chuyển văn bản CSV/TSV thành các dòng import. Bỏ qua dòng tiêu đề nếu ô đầu là "Giai đoạn".
+const parseImportText = (text: string): ImportRow[] => {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim() !== '');
+  if (lines.length === 0) return [];
+  const delim = lines[0].includes('\t') ? '\t' : ',';
+  const rows: ImportRow[] = [];
+  lines.forEach((line, idx) => {
+    const cells = splitCsvLine(line, delim);
+    const first = (cells[0] || '').toLowerCase();
+    if (idx === 0 && (first === 'giai đoạn' || first === 'giai doan')) return; // header
+    const num = (v?: string) => { const n = Number((v || '').replace(/[^\d.-]/g, '')); return v && !isNaN(n) ? n : undefined; };
+    rows.push({
+      name: cells[0] || undefined,
+      startDate: cells[1] || undefined,
+      endDate: cells[2] || undefined,
+      objective: cells[3] || undefined,
+      output: cells[4] || undefined,
+      productionBudget: num(cells[5]),
+      businessBudget: num(cells[6]),
+    });
+  });
+  return rows;
+};
+
+const ImportPhasesModal: React.FC<{ stepCount: number; onClose: () => void; onImport: (rows: ImportRow[]) => void }> = ({ stepCount, onClose, onImport }) => {
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const rows = parseImportText(text);
+
+  const onFile = (f: File | null) => {
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { setText(String(reader.result || '')); setError(''); };
+    reader.onerror = () => setError('Không đọc được file.');
+    reader.readAsText(f, 'utf-8');
+  };
+
+  const downloadTemplate = () => {
+    const sample = [
+      IMPORT_COLS.join(','),
+      'Hình thành cơ hội,2026-05-10,2026-06-30,Xác định nhu cầu khách hàng,Hồ sơ cơ hội,0,0',
+      'Khảo sát; lập kế hoạch dự án,2026-07-01,2027-02-28,Khảo sát hiện trạng,Bản kế hoạch dự án,100000000,50000000',
+    ].join('\n');
+    const blob = new Blob(['﻿' + sample], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'mau-import-giai-doan.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const apply = () => {
+    if (rows.length === 0) { setError('Chưa có dữ liệu hợp lệ để import.'); return; }
+    onImport(rows);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2"><Upload size={15} className="text-blue-600" />Import thông tin các giai đoạn</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+
+        <div className="p-4 space-y-3 overflow-y-auto">
+          <div className="text-[11px] text-gray-600 bg-blue-50 border border-blue-100 rounded p-2.5 leading-relaxed">
+            Dữ liệu theo <b>7 cột</b>, đúng thứ tự: <b>{IMPORT_COLS.join(' • ')}</b>.
+            Ngày dạng <code>YYYY-MM-DD</code>, ngân sách là số. Hỗ trợ file <b>CSV</b> hoặc <b>dán trực tiếp từ Excel</b> (ngăn cách bằng Tab).
+            Dòng thứ i tương ứng giai đoạn {khCode(0)}, {khCode(1)}… Dòng dư sẽ <b>tạo giai đoạn mới</b>.
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className={`${Btn.ghost} cursor-pointer`}>
+              <FileSpreadsheet size={13} className="mr-1" />Chọn file CSV
+              <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={e => onFile(e.target.files?.[0] || null)} />
+            </label>
+            <button onClick={downloadTemplate} className={Btn.ghost}><Download size={13} className="mr-1" />Tải file mẫu</button>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-gray-600 block mb-1">Hoặc dán dữ liệu (CSV / copy từ Excel):</label>
+            <textarea value={text} onChange={e => { setText(e.target.value); setError(''); }} rows={6}
+              placeholder={`${IMPORT_COLS.join(',')}\nHình thành cơ hội,2026-05-10,2026-06-30,Mục tiêu...,Kết quả...,0,0`}
+              className="w-full text-[11px] font-mono border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400 resize-y" />
+          </div>
+
+          {error && <div className="text-[11px] text-red-600 font-semibold">{error}</div>}
+
+          {rows.length > 0 && (
+            <div>
+              <div className="text-[11px] font-semibold text-gray-600 mb-1">Xem trước ({rows.length} dòng):</div>
+              <div className="overflow-x-auto border border-gray-200 rounded max-h-52 overflow-y-auto">
+                <table className="w-full text-[11px] border-collapse">
+                  <thead className="bg-gray-100 sticky top-0"><tr className="text-gray-700">
+                    <th className="px-2 py-1 text-left border-b border-gray-200">GĐ</th>
+                    {IMPORT_COLS.map(c => <th key={c} className="px-2 py-1 text-left border-b border-gray-200 whitespace-nowrap">{c}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i} className={`border-b border-gray-100 ${i >= stepCount ? 'bg-green-50/60' : ''}`}>
+                        <td className="px-2 py-1 font-bold text-gray-700">{khCode(i)}{i >= stepCount && <span className="ml-1 text-[9px] text-green-700 font-semibold">mới</span>}</td>
+                        <td className="px-2 py-1">{r.name || '—'}</td>
+                        <td className="px-2 py-1 whitespace-nowrap">{r.startDate || '—'}</td>
+                        <td className="px-2 py-1 whitespace-nowrap">{r.endDate || '—'}</td>
+                        <td className="px-2 py-1 max-w-[160px] truncate" title={r.objective}>{r.objective || '—'}</td>
+                        <td className="px-2 py-1 max-w-[160px] truncate" title={r.output}>{r.output || '—'}</td>
+                        <td className="px-2 py-1 text-right whitespace-nowrap">{r.productionBudget !== undefined ? fmtFull(r.productionBudget) : '—'}</td>
+                        <td className="px-2 py-1 text-right whitespace-nowrap">{r.businessBudget !== undefined ? fmtFull(r.businessBudget) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
+          <button onClick={onClose} className={Btn.ghost}>Hủy</button>
+          <button onClick={apply} disabled={rows.length === 0} className={`${Btn.primary} ${rows.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            <Check size={13} className="mr-1" />Áp dụng ({rows.length} dòng)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
   onUpd: (sid: string, patch: Partial<ProjectStep>) => void; onUpdSpent: (stepId: string, amount: number) => void;
   onShowHistory: (idx: number) => void; onAddPhase: () => void; onRmPhase: (idx: number) => void;
-}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase }) => {
+  onImport: (rows: ImportRow[]) => void;
+}> = ({ pakd, editable, currentPhase, phaseIdx, canEditSpent, onUpd, onUpdSpent, onShowHistory, onAddPhase, onRmPhase, onImport }) => {
+  const [importOpen, setImportOpen] = useState(false);
   const steps = pakd.steps;
   const lastIdx = steps.length - 1;
   const revenue = steps[lastIdx]?.revenue || 0;
@@ -1254,8 +1442,14 @@ const PhaseTable: React.FC<{
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <SectionTitle>Thông tin các giai đoạn ({steps.length}) — giai đoạn hiện tại: {khCode(currentPhase - 1)}</SectionTitle>
-        {editable && <button onClick={onAddPhase} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm giai đoạn ({khCode(steps.length)})</button>}
+        {editable && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
+            <button onClick={onAddPhase} className={Btn.primary}><Plus size={13} className="mr-1" />Thêm giai đoạn ({khCode(steps.length)})</button>
+          </div>
+        )}
       </div>
+      {importOpen && <ImportPhasesModal stepCount={steps.length} onClose={() => setImportOpen(false)} onImport={(rows) => { onImport(rows); setImportOpen(false); }} />}
       <div className="overflow-x-auto">
         <table className="w-full text-[11px] border-collapse border border-gray-300">
           <thead>

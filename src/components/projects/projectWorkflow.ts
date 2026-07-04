@@ -71,8 +71,15 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[]): { p
   return { pakd: updated };
 }
 
+// Các đuôi mã bị loại trừ (2 chữ số cuối) — không cấp cho mã dự án.
+const EXCLUDED_CODE_SUFFIXES = [49, 53];
+
 function generateCodes(pakd: Pakd): Pick<Pakd, 'masterCode' | 'businessCode' | 'productionCode'> {
-  const seq = Math.floor(100 + Math.random() * 899);
+  let seq = Math.floor(100 + Math.random() * 899);
+  // Bỏ qua các mã có đuôi (2 chữ số cuối) nằm trong danh sách loại trừ.
+  while (EXCLUDED_CODE_SUFFIXES.includes(seq % 100)) {
+    seq = Math.floor(100 + Math.random() * 899);
+  }
   const master = `022.${seq}`;
   return { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2` };
 }
