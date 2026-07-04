@@ -171,6 +171,7 @@ export interface Pakd {
   comments?: PakdComment[];
   planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
   planChangeLogs?: PlanChangeLog[]; // log điều chỉnh trực tiếp phương án sau khi hoàn tất (cũ → mới)
+  pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }

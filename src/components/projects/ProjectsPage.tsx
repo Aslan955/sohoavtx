@@ -5,7 +5,7 @@ import {
   Upload, Download, RotateCcw,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog,
+  Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -470,7 +470,22 @@ const DetailView: React.FC<{
         }
       }
     }
-    if (logs.length > 0) setPakd(p => ({ ...p, planChangeLogs: [...logs, ...(p.planChangeLogs || [])] }));
+    if (logs.length > 0) {
+      const reason = adjustReason.trim();
+      // Điều chỉnh xong → nộp lại vào luồng duyệt từ bước đầu; ghi mốc & lý do vào lịch sử phê duyệt.
+      const submitRec: ApprovalRecord = {
+        id: rid('AR'), stepLabel: 'Điều chỉnh phương án — nộp duyệt lại', role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
+        comment: `Điều chỉnh phương án (${logs.length} thay đổi). Lý do: ${reason}`,
+        oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
+      };
+      setPakd(p => ({
+        ...p,
+        planChangeLogs: [...logs, ...(p.planChangeLogs || [])],
+        status: 'PENDING_SALES_DIRECTOR',
+        pendingAdjustReason: reason,
+        approvalHistory: [submitRec, ...p.approvalHistory],
+      }));
+    }
     setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
   };
   const canAdjustPlan = pakd.status === 'COMPLETED' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
@@ -512,6 +527,14 @@ const DetailView: React.FC<{
           {editingNow
             ? <span>Bạn đang <b>sửa phương án</b> (tạm dừng duyệt). Chỉnh xong bấm <b>"Yêu cầu duyệt lại (từ bước của tôi)"</b> — luồng sẽ chạy lại từ bước <b>{ROLE_LABEL[simUser.role]}</b>.</span>
             : <span>Phương án đang được <b>{ROLE_LABEL[pakd.editingRole]}</b> chỉnh sửa — tạm dừng phê duyệt.</span>}
+        </div>
+      )}
+
+      {/* Lý do điều chỉnh đang chờ duyệt lại — hiển thị cho mọi cấp trong luồng */}
+      {pakd.pendingAdjustReason && !!PAKD_PENDING_ROLE[pakd.status] && (
+        <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
+          <FileEdit size={14} className="mt-0.5 shrink-0" />
+          <span>Phương án <b>vừa được điều chỉnh</b> và đang trình duyệt lại. <b>Lý do điều chỉnh:</b> <span className="text-orange-900 font-semibold">{pakd.pendingAdjustReason}</span> — xem chi tiết thay đổi ở mục <b>Lịch sử điều chỉnh phương án</b>.</span>
         </div>
       )}
 

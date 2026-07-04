@@ -134,10 +134,10 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction |
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Sinh mã & khóa chi phí', old, next, `Mã tổng ${codes.masterCode}, Mã KD ${codes.businessCode}, Mã SX ${codes.productionCode}. Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }
 
-  // BOD duyệt (-> COMPLETED) -> hệ thống tự tạo dự án Jira
+  // BOD duyệt (-> COMPLETED) -> hệ thống tự tạo dự án Jira & xóa lý do điều chỉnh đang chờ
   if (pakd.status === 'PENDING_BOD') {
     const key = pakd.customerCode.substring(0, 6).toUpperCase();
-    updated = { ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}` };
+    updated = { ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}`, pendingAdjustReason: undefined };
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Tạo dự án Jira', old, next, `Đã tạo project Jira ${key}.`);
   }
 
