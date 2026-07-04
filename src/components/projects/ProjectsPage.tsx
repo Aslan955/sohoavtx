@@ -1026,16 +1026,21 @@ const BudgetHistoryModal: React.FC<{
               <p className="text-[11px] text-gray-400 italic">Chưa có cập nhật chi thực tế nào.</p>
             ) : (
               <table className="w-full text-[11px] border-collapse border border-gray-200">
-                <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="34px" center>Lần</Th><Th w="140px">Thời gian</Th><Th w="160px">Người cập nhật</Th><Th w="130px" right>Số tiền đã chi</Th></tr></thead>
+                <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600"><Th w="34px" center>Lần</Th><Th w="140px">Thời gian</Th><Th w="160px">Người cập nhật</Th><Th w="120px" right>Chi lần này</Th><Th w="130px" right>Tổng lũy kế</Th></tr></thead>
                 <tbody>
-                  {step.spentLog!.map((sp, i) => (
+                  {step.spentLog!.map((sp, i) => {
+                    // spentLog mới nhất ở đầu mảng → tổng lũy kế tại dòng i = cộng dồn từ dòng i tới cuối
+                    const cumulative = step.spentLog!.slice(i).reduce((sum, x) => sum + x.amount, 0);
+                    return (
                     <tr key={i} className="border-b border-gray-100">
                       <Td center muted>{step.spentLog!.length - i}</Td>
                       <Td mono>{sp.at}</Td>
                       <Td>{sp.by} ({ROLE_LABEL[sp.role] || sp.role})</Td>
                       <Td right><b className="text-amber-800">{fmtFull(sp.amount)}</b></Td>
+                      <Td right><b className="text-gray-700">{fmtFull(cumulative)}</b></Td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -1046,15 +1051,22 @@ const BudgetHistoryModal: React.FC<{
   );
 };
 
-// Ô nhập chi thực tế — commit khi rời ô hoặc Enter (ghi log 1 lần mỗi lần đổi)
-const SpentCell: React.FC<{ value: number; over: boolean; onCommit: (v: number) => void }> = ({ value, over, onCommit }) => {
-  const [v, setV] = useState(String(value));
-  React.useEffect(() => { setV(String(value)); }, [value]);
-  const commit = () => { const n = Number(v) || 0; if (n !== value) onCommit(n); };
+// Ô cập nhật chi thực tế — mỗi lần nhập là khoản chi của lần đó (cộng dồn vào tổng)
+const SpentCell: React.FC<{ nextTime: number; onAdd: (inc: number) => void }> = ({ nextTime, onAdd }) => {
+  const [v, setV] = useState('');
+  const n = Number(v) || 0;
+  const add = () => { if (n > 0) { onAdd(n); setV(''); } };
   return (
-    <input type="number" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit}
-      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-      className={`w-full border rounded px-1.5 py-1 text-right outline-none focus:border-amber-500 ${over ? 'border-red-400 text-red-600 font-bold' : 'border-amber-300 bg-amber-50 font-semibold text-amber-800'}`} />
+    <div className="flex flex-col gap-1">
+      <input type="number" value={v} onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+        placeholder="Số tiền lần này"
+        className="w-full border border-amber-300 bg-amber-50 rounded px-1.5 py-1 text-right outline-none focus:border-amber-500 font-semibold text-amber-800" />
+      <button onClick={add} disabled={n <= 0}
+        className={`flex items-center justify-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold ${n > 0 ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+        <Plus size={11} />Cập nhật (lần {nextTime})
+      </button>
+    </div>
   );
 };
 
@@ -1465,7 +1477,7 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Mục tiêu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Kết quả đầu ra</th>
               <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách phân bổ (đ)</th>
-              <th colSpan={2} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Chi thực tế tính đến hiện tại</th>
+              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Chi thực tế tính đến hiện tại</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}>Lịch sử NS</th>
             </tr>
@@ -1473,7 +1485,8 @@ const PhaseTable: React.FC<{
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Kinh doanh</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '110px' }}>Tổng</th>
-              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '115px' }}>Số tiền (đ)</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '150px' }}>Số tiền lần này (đ)</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '120px' }}>Tổng chi phí các lần (đ)</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '85px' }}>% / NS</th>
             </tr>
           </thead>
@@ -1507,17 +1520,24 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <input type="number" value={s.businessBudget || 0} onChange={(e) => onUpd(s.id, { businessBudget: Number(e.target.value) })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
                   
-                  {/* Chi thực tế đã chi (AM/GĐ KD/GĐ Khối nhập, có log) & % */}
+                  {/* Số tiền lần này: nhập khoản chi mỗi lần, có nút cập nhật */}
                   <Td right className="bg-amber-50/20">
                     {canEditSpent
-                      ? <SpentCell value={rowActual} over={rowActual > rowTotal && rowTotal > 0} onCommit={(v) => onUpdSpent(s.id, v)} />
-                      : <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>}
+                      ? <SpentCell nextTime={(s.spentLog?.length || 0) + 1} onAdd={(inc) => onUpdSpent(s.id, inc)} />
+                      : (s.spentLog?.length || 0) > 0
+                        ? <span className="font-semibold text-amber-800">{fmtFull(s.spentLog![0].amount)}</span>
+                        : <span className="text-gray-300">—</span>}
                     {(s.spentLog?.length || 0) > 0 && (
                       <button onClick={() => onShowHistory(i)} title="Xem toàn bộ lịch sử chi thực tế" className="block w-full mt-0.5 text-[9px] text-blue-600 hover:underline text-right leading-tight">
-                        Lần {s.spentLog!.length} • {s.spentLog![0].at}
+                        Lần gần nhất: {s.spentLog!.length} • {s.spentLog![0].at}
                         {s.spentLog!.length > 1 && <span className="text-gray-400"> (xem {s.spentLog!.length} lần)</span>}
                       </button>
                     )}
+                  </Td>
+                  {/* Tổng chi phí các lần (cộng dồn) */}
+                  <Td right className="bg-amber-50/20">
+                    <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>
+                    {(s.spentLog?.length || 0) > 0 && <span className="block text-[9px] text-gray-400">{s.spentLog!.length} lần</span>}
                   </Td>
                   <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
@@ -1545,6 +1565,7 @@ const PhaseTable: React.FC<{
                 const grandActualPct = grand > 0 ? (grandActual / grand) * 100 : 0;
                 return (
                   <>
+                    <Td right className="bg-amber-100/50 text-amber-900">—</Td>
                     <Td right className="bg-amber-100/50 text-amber-900">{fmtFull(grandActual)}</Td>
                     <Td right className="bg-amber-100/50 text-amber-900">{grand > 0 ? `${grandActualPct.toFixed(0)}%` : '—'}</Td>
                   </>

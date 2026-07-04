@@ -363,14 +363,16 @@ export function revisePlan(pakd: Pakd, reason: string, actor: string, role: User
 }
 
 // ===================== Cập nhật chi thực tế đã chi cho giai đoạn (AM/GĐ KD/GĐ Khối) =====================
-export function updateActualSpent(pakd: Pakd, stepId: string, amount: number, actor: string, role: UserRole, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+// Mỗi lần cập nhật là một KHOẢN CHI của lần đó (increment). Tổng chi = cộng dồn các lần.
+export function updateActualSpent(pakd: Pakd, stepId: string, increment: number, actor: string, role: UserRole, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
   const step = pakd.steps.find(s => s.id === stepId);
   if (!step) return { pakd, error: 'Không tìm thấy giai đoạn.' };
+  if (!increment || increment === 0) return { pakd }; // không ghi khoản 0
   const prev = step.actualSpent || 0;
-  if (prev === amount) return { pakd };
-  const entry = { at: nowStr(), by: actor, role, amount };
-  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, actualSpent: amount, spentLog: [entry, ...(s.spentLog || [])] } : s) };
-  pushAudit(log, updated, actor, role, `Cập nhật chi thực tế (${step.name})`, undefined, undefined, `${prev.toLocaleString('vi-VN')} đ → ${amount.toLocaleString('vi-VN')} đ`);
+  const total = prev + increment;
+  const entry = { at: nowStr(), by: actor, role, amount: increment };
+  const updated: Pakd = { ...pakd, steps: pakd.steps.map(s => s.id === stepId ? { ...s, actualSpent: total, spentLog: [entry, ...(s.spentLog || [])] } : s) };
+  pushAudit(log, updated, actor, role, `Cập nhật chi thực tế (${step.name})`, undefined, undefined, `Lần ${(step.spentLog?.length || 0) + 1}: +${increment.toLocaleString('vi-VN')} đ → tổng ${total.toLocaleString('vi-VN')} đ`);
   return { pakd: updated };
 }
 
