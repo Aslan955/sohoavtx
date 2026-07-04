@@ -5,7 +5,7 @@ import {
   Upload, Download, RotateCcw,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole,
+  Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -350,6 +350,8 @@ const DetailView: React.FC<{
   const [decision, setDecision] = useState('');
   const [draftSaved, setDraftSaved] = useState(false); // xác nhận đã lưu nháp
   const [restartConfirm, setRestartConfirm] = useState(false); // popup xác nhận "làm lại từ đầu"
+  const [adjustMode, setAdjustMode] = useState(false); // đang điều chỉnh trực tiếp phương án (sau khi hoàn tất)
+  const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
@@ -431,6 +433,41 @@ const DetailView: React.FC<{
   const rmTask = (sid: string, tid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).filter(t => t.id !== tid) } : s) }));
   const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
 
+  // ----- Điều chỉnh trực tiếp phương án sau khi hoàn tất (không quản lý version, chỉ ghi log cũ → mới) -----
+  const startAdjustment = () => { setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps))); setAdjustMode(true); };
+  const cancelAdjustment = () => { if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot })); setAdjustMode(false); setAdjustSnapshot(null); };
+  const saveAdjustment = () => {
+    const before = adjustSnapshot || [];
+    const after = pakd.steps;
+    const at = stamp();
+    const FIELDS: { key: keyof ProjectStep; label: string; money?: boolean }[] = [
+      { key: 'name', label: 'Tên giai đoạn' }, { key: 'startDate', label: 'Ngày bắt đầu' }, { key: 'endDate', label: 'Ngày kết thúc' },
+      { key: 'objective', label: 'Mục tiêu' }, { key: 'output', label: 'Kết quả đầu ra' },
+      { key: 'businessBudget', label: 'NS Kinh doanh', money: true }, { key: 'productionBudget', label: 'NS Sản xuất', money: true },
+    ];
+    const logs: PlanChangeLog[] = [];
+    const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
+      ({ id: rid('LOG'), at, by: simUser.fullName, role: simUser.role, stepCode, field, before: bef, after: aft });
+    const maxLen = Math.max(before.length, after.length);
+    for (let i = 0; i < maxLen; i++) {
+      const b = before[i]; const a = after[i]; const code = khCode(i);
+      if (b && !a) { logs.push(mk(code, 'Giai đoạn', `${code} — ${b.name}`, 'Đã xóa giai đoạn')); continue; }
+      if (!b && a) { logs.push(mk(code, 'Giai đoạn', '—', `Thêm mới: ${code} — ${a.name}`)); continue; }
+      for (const f of FIELDS) {
+        if (f.money) {
+          const bv = Number(b[f.key]) || 0; const av = Number(a[f.key]) || 0;
+          if (bv !== av) logs.push(mk(code, f.label, fmtFull(bv), fmtFull(av)));
+        } else {
+          const bv = (b[f.key] as string) || ''; const av = (a[f.key] as string) || '';
+          if (bv !== av) logs.push(mk(code, f.label, bv || '—', av || '—'));
+        }
+      }
+    }
+    if (logs.length > 0) setPakd(p => ({ ...p, planChangeLogs: [...logs, ...(p.planChangeLogs || [])] }));
+    setAdjustMode(false); setAdjustSnapshot(null);
+  };
+  const canAdjustPlan = pakd.status === 'COMPLETED' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
+
   // Thông tin dự án sản xuất được nhập ở KH02. Chỉ chặn chuyển giai đoạn khi đang ở KH02 mà chưa nhập đủ.
   const kh02 = pakd.steps[1];
   const kh02InfoComplete = !!(kh02?.productionInfo?.projectManager && kh02?.productionInfo?.startDate && kh02?.productionInfo?.endDate);
@@ -446,13 +483,18 @@ const DetailView: React.FC<{
           {draftSaved && <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600"><Check size={13} />Đã lưu nháp</span>}
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={() => { setDraftSaved(true); window.setTimeout(() => setDraftSaved(false), 2500); }} className={Btn.green}><FileEdit size={14} className="mr-1.5" />Lưu nháp</button>}
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
-          {pakd.locked && simUser.role === 'SALE' && !adjusting && <button onClick={startAdjust} className={Btn.purple}><FileEdit size={14} className="mr-1.5" />Điều chỉnh chi phí</button>}
           {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
-          {pakd.status === 'COMPLETED' && ['SALE', 'BUSINESS_DIRECTOR', 'SALES_DIRECTOR', 'ADMIN'].includes(simUser.role) && (
-            <button onClick={() => setReviseOpen(true)} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiên bản mới (V{pakd.version + 1})</button>
+          {/* Điều chỉnh trực tiếp phương án sau khi hoàn tất (ghi log cũ → mới, không dùng version) */}
+          {canAdjustPlan && !adjustMode && (
+            <button onClick={startAdjustment} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiếu điều chỉnh</button>
           )}
-          {adjusting && <button onClick={() => setAdjusting(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong điều chỉnh</button>}
+          {adjustMode && (
+            <>
+              <button onClick={saveAdjustment} className={Btn.green}><Check size={14} className="mr-1.5" />Lưu điều chỉnh</button>
+              <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Hủy</button>
+            </>
+          )}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
         </div>
       </div>
@@ -570,33 +612,25 @@ const DetailView: React.FC<{
             <SheetTab label="Sản xuất — Triển khai" active={sheet === 'PRODUCTION'} onClick={() => setSheet('PRODUCTION')} />
           </div>
 
-          {sheet === 'BUSINESS' && (() => {
-            const pastVers = [...(pakd.planRevisions || [])].sort((a, b) => a.version - b.version); // các phiên bản đã chốt (snapshot)
-            const activeSnap = verTab !== 'cur' ? pastVers.find(r => r.version === verTab) : null;
-            return (
+          {sheet === 'BUSINESS' && (
             <div className="p-4 space-y-4">
-              {/* Tab phiên bản phương án (trái) + Tổng hợp ngân sách (phải) */}
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                {pastVers.length > 0 ? (
-                  <div className="flex flex-wrap gap-1 border border-gray-200 rounded p-1 bg-gray-50 w-fit">
-                    {pastVers.map(r => (
-                      <button key={r.version} onClick={() => setVerTab(r.version)} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === r.version ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{r.version} <span className="opacity-70">(đã chốt)</span></button>
-                    ))}
-                    <button onClick={() => setVerTab('cur')} className={`px-3 py-1.5 text-xs font-semibold rounded ${verTab === 'cur' ? 'bg-[#007bff] text-white' : 'text-gray-600 hover:bg-gray-100'}`}>V{pakd.version} <span className="opacity-80">({PAKD_STATUS_LABEL[pakd.status as keyof typeof PAKD_STATUS_LABEL]})</span></button>
-                  </div>
-                ) : <div />}
-                {!activeSnap && <BudgetSummaryBar steps={pakd.steps} />}
+              <div className="flex items-start justify-end gap-3 flex-wrap">
+                <BudgetSummaryBar steps={pakd.steps} />
               </div>
 
-              {activeSnap ? (
-                <SnapshotTable snap={activeSnap.snapshot} versionLabel={`V${activeSnap.version}`} by={activeSnap.by} at={activeSnap.at} />
-              ) : (
-                <PhaseTable pakd={pakd} editable={editable} currentPhase={currentPhase} canEditSpent={canEditSpent}
-                  onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                  onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
+              {/* Banner khi đang điều chỉnh trực tiếp phương án */}
+              {adjustMode && (
+                <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-center gap-2">
+                  <FileEdit size={14} />
+                  <span>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Lưu điều chỉnh"</b> — mọi thay đổi (cũ → mới) sẽ được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</span>
+                </div>
               )}
+
+              <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
             </div>
-          ); })()}
+          )}
 
           {sheet === 'PRODUCTION' && (
             <ProductionSheet pakd={pakd} prodEditable={prodEditable} simRole={simUser.role} afterAccounting={afterAccounting}
@@ -606,6 +640,27 @@ const DetailView: React.FC<{
           )}
         </div>
       </div>
+
+      {/* Lịch sử điều chỉnh trực tiếp phương án (cũ → mới) */}
+      {(pakd.planChangeLogs || []).length > 0 && (
+        <Panel title="Lịch sử điều chỉnh phương án (dữ liệu cũ → mới)" icon={<History size={13} />}>
+          <table className="w-full text-[11px] border-collapse">
+            <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
+              <Th w="120px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th><Th w="70px" center>Giai đoạn</Th><Th w="130px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Dữ liệu sau thay đổi</Th>
+            </tr></thead>
+            <tbody>{pakd.planChangeLogs!.map(l => (
+              <tr key={l.id} className="border-b border-gray-100 align-top">
+                <Td muted mono>{l.at}</Td>
+                <Td>{l.by} <span className="text-gray-400">({ROLE_LABEL[l.role] || l.role})</span></Td>
+                <Td center><span className="font-semibold text-gray-700">{l.stepCode}</span></Td>
+                <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
+                <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
+                <Td><span className="whitespace-pre-wrap text-green-700 font-medium">{l.after}</span></Td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </Panel>
+      )}
 
       {/* version history */}
       {pakd.versionHistory.length > 0 && (

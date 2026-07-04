@@ -170,6 +170,7 @@ export interface Pakd {
   versionHistory: PakdVersionSnapshot[];
   comments?: PakdComment[];
   planRevisions?: PlanRevision[]; // lịch sử phiếu điều chỉnh phương án (mở lại duyệt từ đầu)
+  planChangeLogs?: PlanChangeLog[]; // log điều chỉnh trực tiếp phương án sau khi hoàn tất (cũ → mới)
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }
@@ -177,6 +178,18 @@ export interface Pakd {
 export interface PlanStepSnap {
   code: string; name: string; start?: string; end?: string; objective?: string; output?: string;
   biz: number; prod: number; revenue: number;
+}
+
+// Log một thay đổi trên phương án khi điều chỉnh trực tiếp (sau khi PAKD hoàn tất) — lưu dữ liệu cũ → mới.
+export interface PlanChangeLog {
+  id: string;
+  at: string;
+  by: string;
+  role: UserRole;
+  stepCode: string; // KH01.. hoặc '' nếu ở cấp phương án
+  field: string;    // tên trường bị đổi (Mục tiêu, NS Kinh doanh...)
+  before: string;   // giá trị cũ (đã định dạng)
+  after: string;    // giá trị sau thay đổi (đã định dạng)
 }
 export interface PlanRevision {
   id: string;
