@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download,
+  Upload, Download, RotateCcw,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole,
@@ -339,7 +339,7 @@ const DetailView: React.FC<{
   onAddOutsource: (label: string) => void; onAddComment: (content: string) => void;
   onCreateBudgetAdj: (stepId: string, after: { business: number; production: number }, reason: string) => void;
   onDecideBudgetAdj: (stepId: string, adjId: string, action: ApprovalAction, comment: string) => void;
-  onDecide: (action: ApprovalAction, comment: string) => void;
+  onDecide: (action: ApprovalAction | 'RESTART', comment: string) => void;
   onRequestAdvance: (stepId: string) => void;
   onDecideAdvance: (stepId: string, action: ApprovalAction, comment: string) => void;
   onRevisePlan: (reason: string) => void;
@@ -475,6 +475,7 @@ const DetailView: React.FC<{
           <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Ý kiến / lý do (tùy chọn)..." className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400" />
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => { onDecide('APPROVE', decision); setDecision(''); }} className={Btn.green}><Check size={13} className="mr-1" />Duyệt</button>
+            <button onClick={() => { if (window.confirm('Trả PAKD về người lập để LÀM LẠI TỪ ĐẦU và duyệt lại từ bước đầu?')) { onDecide('RESTART', decision); setDecision(''); } }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><RotateCcw size={13} className="mr-1" />Làm lại từ đầu</button>
             <button onClick={() => { onDecide('REJECT', decision); setDecision(''); }} className={Btn.red}><Ban size={13} className="mr-1" />Từ chối</button>
           </div>
         </div>
@@ -646,7 +647,7 @@ const DetailView: React.FC<{
         const rows = [...mainRows, ...crRows].sort((a, b) => a.at.localeCompare(b.at));
         const actInfo = (act: string): [string, string] =>
           act === 'APPROVE' ? ['Duyệt', 'text-green-600'] : act === 'SUBMIT' ? ['Nộp', 'text-blue-600']
-          : act === 'CREATE' ? ['Tạo phiếu', 'text-purple-600'] : ['Trả lại', 'text-red-600'];
+          : act === 'CREATE' ? ['Tạo phiếu', 'text-purple-600'] : act === 'RESTART' ? ['Làm lại từ đầu', 'text-orange-600'] : ['Trả lại', 'text-red-600'];
         if (rows.length === 0) return null;
         return (
           <Panel title="Lịch sử phê duyệt">
@@ -1149,13 +1150,13 @@ const SpentCell: React.FC<{ nextTime: number; onAdd: (inc: number) => void }> = 
 };
 
 // ===================== Lịch sử trao đổi / ý kiến của các thành viên trong luồng =====================
-type FlowEntry = { at: string; author: string; role: UserRole; context: string; action: 'NOTE' | 'APPROVE' | 'REJECT' | 'REVISION' | 'SUBMIT'; text: string };
+type FlowEntry = { at: string; author: string; role: UserRole; context: string; action: 'NOTE' | 'APPROVE' | 'REJECT' | 'REVISION' | 'SUBMIT' | 'RESTART'; text: string };
 const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: string) => void }> = ({ pakd, simUser, onAddComment }) => {
   const [text, setText] = useState('');
   const entries: FlowEntry[] = [];
   (pakd.comments || []).forEach(c => entries.push({ at: c.createdAt, author: c.author, role: c.role, context: 'Ghi chú / Trao đổi', action: 'NOTE', text: c.content }));
   (pakd.planRevisions || []).forEach(r => entries.push({ at: r.at, author: r.by, role: r.role, context: 'Điều chỉnh phương án (mở lại từ đầu)', action: 'REVISION', text: `${r.fromStatus} → Nháp. Lý do: ${r.reason}` }));
-  (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: a.action === 'SUBMIT' ? 'Nộp trình duyệt' : `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : a.action === 'SUBMIT' ? 'SUBMIT' : 'REVISION', text: a.comment }));
+  (pakd.approvalHistory || []).forEach(a => entries.push({ at: a.createdAt, author: a.actor, role: a.role, context: a.action === 'SUBMIT' ? 'Nộp trình duyệt' : `Phê duyệt PAKD (${a.stepLabel})`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : a.action === 'SUBMIT' ? 'SUBMIT' : a.action === 'RESTART' ? 'RESTART' : 'REVISION', text: a.comment }));
   pakd.steps.forEach((s, idx) => {
     (s.advanceApprovals || []).forEach(a => entries.push({ at: a.at, author: a.actor, role: a.role, context: `Chuyển giai đoạn ${khCode(idx)}`, action: a.action === 'APPROVE' ? 'APPROVE' : a.action === 'REJECT' ? 'REJECT' : 'REVISION', text: a.comment || '' }));
     (s.budgetAdjustments || []).forEach(ba => {
@@ -1168,6 +1169,7 @@ const FlowHistory: React.FC<{ pakd: Pakd; simUser: any; onAddComment: (content: 
     : e.action === 'REJECT' ? <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">Từ chối</span>
     : e.action === 'REVISION' ? <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Cần bổ sung</span>
     : e.action === 'SUBMIT' ? <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Nộp</span>
+    : e.action === 'RESTART' ? <span className="text-[9px] font-bold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">Làm lại từ đầu</span>
     : <span className="text-[9px] font-bold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">Ghi chú</span>;
 
   return (

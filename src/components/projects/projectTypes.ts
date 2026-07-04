@@ -71,7 +71,7 @@ export interface ApprovalRecord {
   stepLabel: string;
   role: UserRole;
   actor: string;
-  action: ApprovalAction | 'SUBMIT'; // SUBMIT = AM nộp trình duyệt (mốc mở đầu luồng)
+  action: ApprovalAction | 'SUBMIT' | 'RESTART'; // SUBMIT = nộp trình duyệt; RESTART = làm lại từ đầu
   comment: string;
   oldStatus: string;
   newStatus: string;

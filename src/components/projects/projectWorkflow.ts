@@ -98,25 +98,26 @@ const PAKD_NEXT_ON_APPROVE: Partial<Record<PakdStatus, PakdStatus>> = {
   PENDING_BOD: 'COMPLETED', // BOD duyệt là hoàn tất
 };
 
-// ----- Phê duyệt PAKD (1 cấp) -----
-export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction, comment: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+// ----- Phê duyệt PAKD (1 cấp). RESTART = làm lại từ đầu (trả về người lập, duyệt lại từ bước đầu). -----
+export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction | 'RESTART', comment: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
   const requiredRole = PAKD_PENDING_ROLE[pakd.status];
   if (!requiredRole) return { pakd, error: 'PAKD không ở trạng thái chờ phê duyệt.' };
   if (requiredRole !== role) return { pakd, error: 'Bạn không có quyền phê duyệt bước này.' };
 
   const old = pakd.status;
   const stepLabel = PAKD_STATUS_LABEL[pakd.status];
+  const defaultComment = action === 'APPROVE' ? 'Đồng ý phê duyệt.' : action === 'RESTART' ? 'Yêu cầu làm lại từ đầu, duyệt lại từ bước đầu.' : 'Trả lại, yêu cầu chỉnh sửa.';
   const record: ApprovalRecord = {
     id: rid('AR'), stepLabel, role, actor, action,
-    comment: comment.trim() || (action === 'APPROVE' ? 'Đồng ý phê duyệt.' : 'Trả lại, yêu cầu chỉnh sửa.'),
+    comment: comment.trim() || defaultComment,
     oldStatus: old, newStatus: old, createdAt: nowStr(),
   };
   let updated: Pakd = { ...pakd, approvalHistory: [record, ...pakd.approvalHistory] };
 
-  if (action === 'REJECT' || action === 'REQUEST_REVISION') {
+  if (action === 'REJECT' || action === 'REQUEST_REVISION' || action === 'RESTART') {
     updated.status = 'RETURNED';
     record.newStatus = 'RETURNED';
-    const label = action === 'REJECT' ? 'Từ chối' : 'Yêu cầu bổ sung thông tin';
+    const label = action === 'REJECT' ? 'Từ chối' : action === 'RESTART' ? 'Làm lại từ đầu' : 'Yêu cầu bổ sung thông tin';
     pushAudit(log, updated, actor, role, `${label} (${stepLabel})`, old, 'RETURNED', record.comment);
     return { pakd: updated };
   }
