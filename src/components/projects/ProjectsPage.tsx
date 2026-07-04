@@ -352,6 +352,8 @@ const DetailView: React.FC<{
   const [restartConfirm, setRestartConfirm] = useState(false); // popup xác nhận "làm lại từ đầu"
   const [adjustMode, setAdjustMode] = useState(false); // đang điều chỉnh trực tiếp phương án (sau khi hoàn tất)
   const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
+  const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
+  const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
@@ -434,8 +436,13 @@ const DetailView: React.FC<{
   const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
 
   // ----- Điều chỉnh trực tiếp phương án sau khi hoàn tất (không quản lý version, chỉ ghi log cũ → mới) -----
-  const startAdjustment = () => { setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps))); setAdjustMode(true); };
-  const cancelAdjustment = () => { if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot })); setAdjustMode(false); setAdjustSnapshot(null); };
+  // Bấm "Tạo phiếu điều chỉnh" → mở popup nhập lý do; xác nhận mới vào chế độ sửa.
+  const confirmAdjustReason = () => {
+    if (!adjustReason.trim()) return;
+    setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps)));
+    setAdjustMode(true); setReasonOpen(false);
+  };
+  const cancelAdjustment = () => { if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot })); setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason(''); };
   const saveAdjustment = () => {
     const before = adjustSnapshot || [];
     const after = pakd.steps;
@@ -447,7 +454,7 @@ const DetailView: React.FC<{
     ];
     const logs: PlanChangeLog[] = [];
     const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
-      ({ id: rid('LOG'), at, by: simUser.fullName, role: simUser.role, stepCode, field, before: bef, after: aft });
+      ({ id: rid('LOG'), at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
     const maxLen = Math.max(before.length, after.length);
     for (let i = 0; i < maxLen; i++) {
       const b = before[i]; const a = after[i]; const code = khCode(i);
@@ -464,7 +471,7 @@ const DetailView: React.FC<{
       }
     }
     if (logs.length > 0) setPakd(p => ({ ...p, planChangeLogs: [...logs, ...(p.planChangeLogs || [])] }));
-    setAdjustMode(false); setAdjustSnapshot(null);
+    setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
   };
   const canAdjustPlan = pakd.status === 'COMPLETED' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role);
 
@@ -487,7 +494,7 @@ const DetailView: React.FC<{
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
           {/* Điều chỉnh trực tiếp phương án sau khi hoàn tất (ghi log cũ → mới, không dùng version) */}
           {canAdjustPlan && !adjustMode && (
-            <button onClick={startAdjustment} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiếu điều chỉnh</button>
+            <button onClick={() => { setAdjustReason(''); setReasonOpen(true); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />Tạo phiếu điều chỉnh</button>
           )}
           {adjustMode && (
             <>
@@ -620,9 +627,12 @@ const DetailView: React.FC<{
 
               {/* Banner khi đang điều chỉnh trực tiếp phương án */}
               {adjustMode && (
-                <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-center gap-2">
-                  <FileEdit size={14} />
-                  <span>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Lưu điều chỉnh"</b> — mọi thay đổi (cũ → mới) sẽ được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</span>
+                <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
+                  <FileEdit size={14} className="mt-0.5 shrink-0" />
+                  <div>
+                    <div>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Lưu điều chỉnh"</b> — mọi thay đổi (cũ → mới) sẽ được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</div>
+                    <div className="mt-1">Lý do điều chỉnh: <b className="text-orange-900">{adjustReason}</b></div>
+                  </div>
                 </div>
               )}
 
@@ -646,12 +656,13 @@ const DetailView: React.FC<{
         <Panel title="Lịch sử điều chỉnh phương án (dữ liệu cũ → mới)" icon={<History size={13} />}>
           <table className="w-full text-[11px] border-collapse">
             <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <Th w="120px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th><Th w="70px" center>Giai đoạn</Th><Th w="130px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Dữ liệu sau thay đổi</Th>
+              <Th w="120px">Thời gian</Th><Th w="150px">Người điều chỉnh</Th><Th w="160px">Lý do</Th><Th w="60px" center>Giai đoạn</Th><Th w="120px">Nội dung</Th><Th>Dữ liệu cũ</Th><Th>Dữ liệu sau thay đổi</Th>
             </tr></thead>
             <tbody>{pakd.planChangeLogs!.map(l => (
               <tr key={l.id} className="border-b border-gray-100 align-top">
                 <Td muted mono>{l.at}</Td>
                 <Td>{l.by} <span className="text-gray-400">({ROLE_LABEL[l.role] || l.role})</span></Td>
+                <Td><span className="italic text-gray-600">{l.reason || '—'}</span></Td>
                 <Td center><span className="font-semibold text-gray-700">{l.stepCode}</span></Td>
                 <Td><span className="font-medium text-gray-700">{l.field}</span></Td>
                 <Td><span className="whitespace-pre-wrap text-red-600 line-through decoration-red-300">{l.before}</span></Td>
@@ -736,6 +747,32 @@ const DetailView: React.FC<{
         <BudgetHistoryModal step={pakd.steps[histIdx]} phaseCode={khCode(histIdx)} simUser={simUser} locked={pakd.locked} onClose={() => setHistIdx(null)}
           onCreate={(after, reason) => onCreateBudgetAdj(pakd.steps[histIdx].id, after, reason)}
           onDecide={(adjId, action, comment) => onDecideBudgetAdj(pakd.steps[histIdx].id, adjId, action, comment)} />
+      )}
+
+      {/* Popup nhập lý do khi tạo phiếu điều chỉnh */}
+      {reasonOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setReasonOpen(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200">
+              <span className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><FileEdit size={16} /></span>
+              <h3 className="text-sm font-bold text-gray-800">Tạo phiếu điều chỉnh</h3>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              <label className="text-[12px] font-semibold text-gray-600">Lý do điều chỉnh <span className="text-red-500">*</span></label>
+              <textarea value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} rows={3} autoFocus
+                placeholder="Nhập lý do vì sao cần điều chỉnh phương án..."
+                className="w-full text-[13px] border border-gray-300 rounded px-2.5 py-2 outline-none focus:border-orange-400 resize-y" />
+              <p className="text-[11px] text-gray-400">Lý do sẽ được lưu kèm mọi thay đổi (cũ → mới) trong Lịch sử điều chỉnh phương án.</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
+              <button onClick={() => setReasonOpen(false)} className={Btn.ghost}>Hủy</button>
+              <button onClick={confirmAdjustReason} disabled={!adjustReason.trim()}
+                className={`flex items-center px-3 py-1.5 text-white text-xs font-semibold rounded ${adjustReason.trim() ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-300 cursor-not-allowed'}`}>
+                <Check size={13} className="mr-1" />Bắt đầu điều chỉnh
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Popup xác nhận "Làm lại từ đầu" */}

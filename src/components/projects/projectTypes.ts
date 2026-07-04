@@ -186,6 +186,7 @@ export interface PlanChangeLog {
   at: string;
   by: string;
   role: UserRole;
+  reason: string;   // lý do điều chỉnh (bắt buộc nhập khi tạo phiếu)
   stepCode: string; // KH01.. hoặc '' nếu ở cấp phương án
   field: string;    // tên trường bị đổi (Mục tiêu, NS Kinh doanh...)
   before: string;   // giá trị cũ (đã định dạng)
