@@ -372,6 +372,11 @@ const DetailView: React.FC<{
   const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
   const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
   const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
+  // Ảnh chụp thông tin chung của dự án (để diff & khôi phục khi điều chỉnh)
+  type InfoSnap = { customerCode: string; customerName: string; domain: string; pmName: string; projStart: string; projEnd: string; revenue: number; expectedCost: number };
+  const infoSnap = (p: Pakd): InfoSnap => ({ customerCode: p.customerCode, customerName: p.customerName, domain: p.domain || '', pmName: p.pmName || '', projStart: p.projStart || '', projEnd: p.projEnd || '', revenue: p.revenue, expectedCost: p.expectedCost ?? 0 });
+  const [adjustInfoSnapshot, setAdjustInfoSnapshot] = useState<InfoSnap | null>(null);
+  const updPakdInfo = (patch: Partial<Pakd>) => setPakd(p => ({ ...p, ...patch }));
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
   const editable = canEditDirect(pakd, simUser.role) || editingNow;
@@ -458,9 +463,14 @@ const DetailView: React.FC<{
   const confirmAdjustReason = () => {
     if (!adjustReason.trim()) return;
     setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps)));
+    setAdjustInfoSnapshot(infoSnap(pakd));
     setAdjustMode(true); setReasonOpen(false);
   };
-  const cancelAdjustment = () => { if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot })); setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason(''); };
+  const cancelAdjustment = () => {
+    if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot }));
+    if (adjustInfoSnapshot) setPakd(p => ({ ...p, customerCode: adjustInfoSnapshot.customerCode, customerName: adjustInfoSnapshot.customerName, domain: adjustInfoSnapshot.domain, pmName: adjustInfoSnapshot.pmName, projStart: adjustInfoSnapshot.projStart, projEnd: adjustInfoSnapshot.projEnd, revenue: adjustInfoSnapshot.revenue, expectedCost: adjustInfoSnapshot.expectedCost }));
+    setAdjustMode(false); setAdjustSnapshot(null); setAdjustInfoSnapshot(null); setAdjustReason('');
+  };
   const saveAdjustment = () => {
     const before = adjustSnapshot || [];
     const after = pakd.steps;
@@ -473,6 +483,25 @@ const DetailView: React.FC<{
     const logs: PlanChangeLog[] = [];
     const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
       ({ id: rid('LOG'), at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
+    // Diff thông tin chung của dự án (mã KH, tên KH, domain, PM, tiến độ, doanh thu, chi phí dự kiến)
+    if (adjustInfoSnapshot) {
+      const cur = infoSnap(pakd);
+      const INFO_FIELDS: { key: keyof InfoSnap; label: string; money?: boolean }[] = [
+        { key: 'customerCode', label: 'Mã khách hàng' }, { key: 'customerName', label: 'Tên khách hàng' },
+        { key: 'domain', label: 'Domain' }, { key: 'pmName', label: 'PM (Người quản lý dự án)' },
+        { key: 'projStart', label: 'Thời gian bắt đầu' }, { key: 'projEnd', label: 'Thời gian kết thúc' },
+        { key: 'revenue', label: 'Doanh thu dự kiến tối thiểu', money: true }, { key: 'expectedCost', label: 'Chi phí dự kiến tối đa', money: true },
+      ];
+      for (const f of INFO_FIELDS) {
+        if (f.money) {
+          const bv = Number(adjustInfoSnapshot[f.key]) || 0; const av = Number(cur[f.key]) || 0;
+          if (bv !== av) logs.push(mk('Chung', f.label, fmtFull(bv), fmtFull(av)));
+        } else {
+          const bv = String(adjustInfoSnapshot[f.key] || ''); const av = String(cur[f.key] || '');
+          if (bv !== av) logs.push(mk('Chung', f.label, bv || '—', av || '—'));
+        }
+      }
+    }
     const maxLen = Math.max(before.length, after.length);
     for (let i = 0; i < maxLen; i++) {
       const b = before[i]; const a = after[i]; const code = khCode(i);
@@ -505,7 +534,7 @@ const DetailView: React.FC<{
         approvalHistory: [submitRec, ...p.approvalHistory],
       }));
     }
-    setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
+    setAdjustMode(false); setAdjustSnapshot(null); setAdjustInfoSnapshot(null); setAdjustReason('');
   };
   // Điều chỉnh phương án: khi đã Hoàn tất, HOẶC khi phiếu điều chỉnh bị trả lại (RETURNED + đã khóa) để sửa & gửi duyệt lại.
   const isReturnedAdjust = pakd.status === 'RETURNED' && pakd.locked;
@@ -653,27 +682,51 @@ const DetailView: React.FC<{
         {pakd.status === 'RETURNED' && <div className="px-4 py-2 border-b border-gray-200 bg-white"><p className="text-[11px] text-red-600 font-medium">⚠ PAKD bị trả lại — Sale chỉnh sửa & nộp lại. Xem lý do ở mục Lịch sử trao đổi.</p></div>}
 
         {/* Thông tin cơ hội + tài chính */}
+        {(() => {
+          const infoEditable = editable || adjustMode;
+          const iInp = 'w-52 text-[11px] border border-gray-300 rounded px-2 py-1 text-right outline-none focus:border-blue-400';
+          return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-b border-gray-200">
           <div className="p-4 border-r border-gray-200">
             <SectionTitle>Thông tin cơ hội kinh doanh</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
-              <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
-              <DRow label="Tên khách hàng" value={pakd.customerName} />
-              <DRow label="Domain" value={pakd.domain || '—'} />
-              <DRow label="Sale / AM" value={pakd.creator} />
-              <DRow label="PM (Người quản lý dự án)" value={pakd.pmName || '—'} />
-              <DRow label="Tiến độ (thời gian thực hiện)" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
+              {infoEditable ? (<>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Mã khách hàng</dt><dd><input value={pakd.customerCode} onChange={(e) => updPakdInfo({ customerCode: e.target.value.toUpperCase() })} className={`${iInp} font-mono`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tên khách hàng</dt><dd><input value={pakd.customerName} onChange={(e) => updPakdInfo({ customerName: e.target.value })} className={iInp} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Domain</dt><dd><select value={pakd.domain || ''} onChange={(e) => updPakdInfo({ domain: e.target.value })} className={iInp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></dd></div>
+                <DRow label="Sale / AM" value={pakd.creator} />
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">PM (Người quản lý dự án)</dt><dd><input value={pakd.pmName || ''} onChange={(e) => updPakdInfo({ pmName: e.target.value })} placeholder="Chưa có" className={iInp} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tiến độ (thời gian thực hiện)</dt><dd className="flex items-center gap-1">
+                  <input type="date" value={pakd.projStart || ''} onChange={(e) => updPakdInfo({ projStart: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
+                  <span className="text-gray-400">→</span>
+                  <input type="date" value={pakd.projEnd || ''} onChange={(e) => updPakdInfo({ projEnd: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
+                </dd></div>
+              </>) : (<>
+                <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
+                <DRow label="Tên khách hàng" value={pakd.customerName} />
+                <DRow label="Domain" value={pakd.domain || '—'} />
+                <DRow label="Sale / AM" value={pakd.creator} />
+                <DRow label="PM (Người quản lý dự án)" value={pakd.pmName || '—'} />
+                <DRow label="Tiến độ (thời gian thực hiện)" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
+              </>)}
             </dl>
           </div>
           <div className="p-4">
             <SectionTitle>Tài chính</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
-              <DRow label="Doanh thu dự kiến tối thiểu" value={fmtFull(pakd.revenue)} strong />
-              <DRow label="Chi phí dự kiến tối đa" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
+              {infoEditable ? (<>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Doanh thu dự kiến tối thiểu</dt><dd><NumberInput value={pakd.revenue} onChange={(v) => updPakdInfo({ revenue: v, expectedContractValue: v, tender: { ...pakd.tender, packagePrice: v } })} className={`${iInp} font-bold`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Chi phí dự kiến tối đa</dt><dd><NumberInput value={pakd.expectedCost ?? 0} onChange={(v) => updPakdInfo({ expectedCost: v })} className={`${iInp} text-red-600 font-semibold`} /></dd></div>
+              </>) : (<>
+                <DRow label="Doanh thu dự kiến tối thiểu" value={fmtFull(pakd.revenue)} strong />
+                <DRow label="Chi phí dự kiến tối đa" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
+              </>)}
               <DRow label="Lợi nhuận gộp dự kiến tối thiểu" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
             </dl>
           </div>
         </div>
+          );
+        })()}
 
         {/* Two sheets: Phương án kinh doanh (KH01-06) | Sản xuất (triển khai) */}
         <div>
