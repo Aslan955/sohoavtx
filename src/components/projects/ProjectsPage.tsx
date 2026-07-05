@@ -18,7 +18,7 @@ import {
   openOutsourceCode, hasOpenChangeRequest, rid, generateCodes,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent, editActualSpent, lockedSpentTotal,
-  canEditPlanNow, startEditDuringApproval, submitEditDuringApproval,
+  canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD';
@@ -597,10 +597,11 @@ const DetailView: React.FC<{
     if (logs.length > 0 || isReturnedAdjust) {
       const reason = adjustReason.trim();
       // Điều chỉnh xong → nộp lại vào luồng duyệt từ bước đầu; ghi mốc & lý do vào lịch sử phê duyệt.
+      const reStage = firstPendingStage(pakd); // bỏ qua cấp GĐ không gán khi duyệt lại
       const submitRec: ApprovalRecord = {
         id: rid('AR'), stepLabel: `Điều chỉnh phương án V${newVersion} — nộp duyệt lại`, role: simUser.role, actor: simUser.fullName, action: 'SUBMIT',
         comment: `Điều chỉnh phương án V${newVersion}${logs.length > 0 ? ` (${logs.length} thay đổi)` : ' (nộp lại)'}. Lý do: ${reason}`,
-        oldStatus: pakd.status, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: at,
+        oldStatus: pakd.status, newStatus: reStage, createdAt: at,
       };
       // Đóng băng phiên bản đang bị thay thế (bản đã chốt trước điều chỉnh) để xem lại read-only.
       // Chỉ tạo snapshot khi điều chỉnh MỚI (không phải nộp lại đơn bị trả).
@@ -617,7 +618,7 @@ const DetailView: React.FC<{
         version: newVersion,
         planChangeLogs: [...logs, ...(p.planChangeLogs || [])],
         versionSnaps: frozen ? [...(p.versionSnaps || []), frozen] : p.versionSnaps,
-        status: 'PENDING_SALES_DIRECTOR',
+        status: reStage,
         pendingAdjustReason: reason,
         approvalHistory: [submitRec, ...p.approvalHistory],
       }));
@@ -2310,13 +2311,13 @@ const RevisePlanModal: React.FC<{ pakd: Pakd; simUser: any; onClose: () => void;
 // ===================== CREATE MODAL =====================
 const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0], domain: DOMAINS[0],
+    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0] as string, domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.name.trim() || !f.customerName.trim() || !f.businessDirector.trim()) { setErr('Cần nhập Tên dự án, Tên khách hàng và Giám đốc khối.'); return; }
+    if (!f.name.trim() || !f.customerName.trim()) { setErr('Cần nhập Tên dự án và Tên khách hàng.'); return; }
     if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
     // Mã dự án sinh tự động ngay khi tạo (không chờ GĐ Khối duyệt)
     const codes = generateCodes({} as Pakd);
@@ -2348,8 +2349,8 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
           <div className="col-span-2 space-y-1"><label className={lab}>Tên dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Tên khách hàng *</label><input value={f.customerName} onChange={(e) => setF({ ...f, customerName: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Giám đốc khối *</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
+          <div className="space-y-1"><label className={lab}>Giám đốc khối</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Khối duyệt) —</option>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
+          <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Kinh doanh duyệt) —</option>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Người lập (AM / GĐ Kinh doanh / GĐ Khối)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>

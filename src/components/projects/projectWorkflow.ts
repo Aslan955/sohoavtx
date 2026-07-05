@@ -40,6 +40,26 @@ export const PAKD_FLOW: PakdStatus[] = [
   'DRAFT', 'PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD', 'COMPLETED',
 ];
 
+// ----- Luồng duyệt ĐỘNG: bỏ qua cấp GĐ Kinh doanh / GĐ Khối nếu không được gán -----
+const PAKD_STAGES: PakdStatus[] = ['PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'];
+// Một cấp có "hiệu lực" (cần duyệt) hay không. Kế toán & BOD luôn bắt buộc; 2 cấp GĐ tùy có gán người hay không.
+function stageActive(pakd: Pakd, status: PakdStatus): boolean {
+  if (status === 'PENDING_SALES_DIRECTOR') return !!(pakd.salesDirector && pakd.salesDirector.trim());
+  if (status === 'PENDING_BUSINESS_DIRECTOR') return !!(pakd.businessDirector && pakd.businessDirector.trim());
+  return true;
+}
+// Cấp chờ duyệt đầu tiên khi nộp (bỏ qua cấp GĐ không gán).
+export function firstPendingStage(pakd: Pakd): PakdStatus {
+  for (const s of PAKD_STAGES) if (stageActive(pakd, s)) return s;
+  return 'COMPLETED';
+}
+// Cấp chờ duyệt kế tiếp sau khi 1 cấp đã duyệt.
+function nextPendingStage(pakd: Pakd, current: PakdStatus): PakdStatus {
+  const idx = PAKD_STAGES.indexOf(current);
+  for (let i = idx + 1; i < PAKD_STAGES.length; i++) if (stageActive(pakd, PAKD_STAGES[i])) return PAKD_STAGES[i];
+  return 'COMPLETED';
+}
+
 // Luồng duyệt phiếu điều chỉnh: GĐ Khối -> BOD -> Kế toán
 export const CR_PENDING_ROLE: Partial<Record<ChangeRequestStatus, UserRole>> = {
   PENDING_BUSINESS_DIRECTOR: 'BUSINESS_DIRECTOR',
@@ -67,14 +87,20 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[], role
     return { pakd, error: 'PAKD cần có ít nhất 1 bước thực hiện trước khi nộp.' };
   }
   const old = pakd.status;
+  const firstStage = firstPendingStage(pakd); // bỏ qua cấp GĐ không gán
   // Ghi mốc "nộp trình duyệt" vào lịch sử phê duyệt để hiển thị đủ luồng từ người lập → BOD.
   const submitRecord: ApprovalRecord = {
     id: rid('AR'), stepLabel: 'Người lập nộp trình duyệt', role, actor, action: 'SUBMIT',
     comment: old === 'RETURNED' ? 'Chỉnh sửa & nộp lại sau khi bị trả lại.' : 'Nộp phương án vào hàng đợi phê duyệt.',
-    oldStatus: old, newStatus: 'PENDING_SALES_DIRECTOR', createdAt: nowStr(),
+    oldStatus: old, newStatus: firstStage, createdAt: nowStr(),
   };
-  const updated: Pakd = { ...pakd, status: 'PENDING_SALES_DIRECTOR', approvalHistory: [submitRecord, ...pakd.approvalHistory] };
-  pushAudit(log, updated, actor, role, 'Nộp PAKD trình duyệt', old, updated.status, 'Nộp PAKD vào hàng đợi phê duyệt Giám đốc Kinh doanh.');
+  let updated: Pakd = { ...pakd, status: firstStage, approvalHistory: [submitRecord, ...pakd.approvalHistory] };
+  // Nếu bỏ qua cả 2 cấp GĐ → vào thẳng Kế toán thì khóa chi phí ngay.
+  if (firstStage === 'PENDING_ACCOUNTANT' && !updated.locked) {
+    const codes = updated.masterCode ? {} : generateCodes(updated);
+    updated = { ...updated, ...codes, locked: true };
+  }
+  pushAudit(log, updated, actor, role, 'Nộp PAKD trình duyệt', old, updated.status, `Nộp PAKD vào hàng đợi phê duyệt ${PAKD_STATUS_LABEL[firstStage]}.`);
   return { pakd: updated };
 }
 
@@ -122,20 +148,20 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction |
     return { pakd: updated };
   }
 
-  // APPROVE
-  const next = PAKD_NEXT_ON_APPROVE[pakd.status]!;
+  // APPROVE — chuyển sang cấp kế tiếp CÒN HIỆU LỰC (bỏ qua cấp GĐ không gán)
+  const next = nextPendingStage(pakd, pakd.status);
   updated.status = next;
   record.newStatus = next;
 
-  // GĐ Khối duyệt -> khóa chi phí (mã dự án đã sinh khi tạo; sinh bù nếu dữ liệu cũ chưa có)
-  if (pakd.status === 'PENDING_BUSINESS_DIRECTOR' && !updated.locked) {
+  // Vào cấp Kế toán -> khóa chi phí (mã đã sinh khi tạo; sinh bù nếu dữ liệu cũ chưa có)
+  if (next === 'PENDING_ACCOUNTANT' && !updated.locked) {
     const codes = updated.masterCode ? {} : generateCodes(updated);
     updated = { ...updated, ...codes, locked: true };
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Khóa chi phí', old, next, `Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }
 
-  // BOD duyệt (-> COMPLETED) -> tạo Jira, xóa lý do điều chỉnh đang chờ & KHÓA toàn bộ chi thực tế đã nhập (không sửa được nữa)
-  if (pakd.status === 'PENDING_BOD') {
+  // Hoàn tất -> tạo Jira, xóa lý do điều chỉnh đang chờ & KHÓA toàn bộ chi thực tế đã nhập (không sửa được nữa)
+  if (next === 'COMPLETED') {
     const key = pakd.customerCode.substring(0, 6).toUpperCase();
     updated = {
       ...updated, jiraKey: key, jiraUrl: `https://vtx-jira.atlassian.net/projects/${key}`, pendingAdjustReason: undefined,
