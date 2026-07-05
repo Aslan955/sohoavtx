@@ -755,12 +755,15 @@ const DetailView: React.FC<{
                 </div>
               </div>
 
-              {simUser.role === 'SALE' && (
+              {/* Mở mã outsource: chỉ sau khi phương án đã khóa (GĐ Khối duyệt) — không cho ở Nháp/Bị trả lại */}
+              {simUser.role === 'SALE' && (pakd.locked ? (
                 <div className="flex items-center gap-2">
                   <input value={osLabel} onChange={(e) => setOsLabel(e.target.value)} placeholder="Nội dung thuê ngoài (mở mã con của mã sản xuất)..." className="flex-1 text-[11px] border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400" />
                   <button onClick={() => { if (osLabel.trim()) { onAddOutsource(osLabel); setOsLabel(''); } }} className={Btn.primary}><Plus size={13} className="mr-1" />Mở mã outsource</button>
                 </div>
-              )}
+              ) : (
+                <p className="text-[11px] text-gray-400 italic">Mã outsource chỉ mở được sau khi phương án được <b>Giám đốc Khối duyệt</b> (đã khóa chi phí).</p>
+              ))}
             </div>
           ) : (
             <p className="text-[11px] text-gray-500 italic">Chưa cấp mã. Mã tổng / kinh doanh / sản xuất được sinh tự động ngay khi tạo dự án.</p>
