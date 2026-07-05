@@ -278,7 +278,6 @@ const fmt = (v: number) => v.toLocaleString('vi-VN') + ' đ';
 // Mở mã outsource — mã con của mã sản xuất (chỉ khi đã có mã sản xuất, không trùng).
 export function openOutsourceCode(pakd: Pakd, label: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
   if (!pakd.productionCode) return { pakd, error: 'Chưa có mã sản xuất để mở mã outsource.' };
-  if (!pakd.locked) return { pakd, error: 'Chỉ mở mã outsource sau khi phương án được Giám đốc Khối duyệt (đã khóa chi phí).' };
   if (!label.trim()) return { pakd, error: 'Nhập nội dung thuê ngoài cho mã outsource.' };
   const next = pakd.outsourceCodes.length + 1;
   const code = `${pakd.productionCode}.${next}`;
