@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw,
+  Upload, Download, RotateCcw, Bell,
 } from 'lucide-react';
 import {
-  Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
+  Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
@@ -143,6 +143,7 @@ export const ProjectsPage: React.FC = () => {
           {current && (<><ChevronRight size={14} className="mx-2 text-gray-400" /><span className="text-blue-600 font-semibold">{current.id}</span></>)}
         </div>
         <div className="flex items-center gap-3">
+          <NotificationBell pendingPakd={pendingPakd} pendingCR={pendingCR} onOpen={setSelectedId} />
           <div className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">{simUser.fullName.split(' ').pop()?.[0]}</div>
             <div className="leading-tight">
@@ -281,6 +282,61 @@ const Btn = {
   green: 'flex items-center px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition-colors',
   red: 'flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition-colors',
   purple: 'flex items-center px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded hover:bg-purple-700 transition-colors',
+};
+
+// ===================== Chuông thông báo — hồ sơ đang chờ chính vai trò user duyệt =====================
+const NotificationBell: React.FC<{
+  pendingPakd: Pakd[];
+  pendingCR: { pakd: Pakd; cr: ChangeRequest }[];
+  onOpen: (id: string) => void;
+}> = ({ pendingPakd, pendingCR, onOpen }) => {
+  const [open, setOpen] = useState(false);
+  const total = pendingPakd.length + pendingCR.length;
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(v => !v)} title="Thông báo" className="relative w-9 h-9 flex items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors">
+        <Bell size={17} />
+        {total > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center animate-pulse">{total}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-1.5">
+              <Bell size={13} className="text-blue-600" />
+              <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Cần bạn xử lý ({total})</span>
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+              {total === 0 && <p className="text-[11px] text-gray-400 italic text-center py-6">Không có hồ sơ nào chờ bạn xử lý.</p>}
+              {pendingPakd.map(p => {
+                const isAdjust = !!p.pendingAdjustReason;
+                return (
+                  <button key={p.id} onClick={() => { onOpen(p.id); setOpen(false); }} className="w-full text-left px-4 py-2.5 border-b border-gray-100 hover:bg-blue-50 flex items-start gap-2.5">
+                    <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${isAdjust ? 'bg-orange-500' : 'bg-amber-500'}`} />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[11px] font-bold text-gray-800 truncate"><span className="font-mono text-blue-600">{p.id}</span> — {p.name}</span>
+                      <span className="block text-[10px] text-gray-500">
+                        {isAdjust ? <>⚠ Điều chỉnh V{p.version} chờ duyệt — <i>{p.pendingAdjustReason}</i></> : <>Chờ bạn duyệt ở bước <b>{PAKD_STATUS_LABEL[p.status as keyof typeof PAKD_STATUS_LABEL]}</b></>}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {pendingCR.map(({ pakd, cr }) => (
+                <button key={cr.id} onClick={() => { onOpen(pakd.id); setOpen(false); }} className="w-full text-left px-4 py-2.5 border-b border-gray-100 hover:bg-purple-50 flex items-start gap-2.5">
+                  <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[11px] font-bold text-gray-800 truncate"><span className="font-mono text-blue-600">{pakd.id}</span> — {pakd.name}</span>
+                    <span className="block text-[10px] text-gray-500">Phiếu điều chỉnh chi phí chờ bạn duyệt</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 // ===================== LIST =====================
