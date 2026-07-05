@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell,
+  Upload, Download, RotateCcw, Bell, Star,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
@@ -81,6 +81,7 @@ export const ProjectsPage: React.FC = () => {
   });
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [phaseFilter, setPhaseFilter] = useState<number | 'ALL'>('ALL'); // lọc theo giai đoạn hiện tại (KH)
+  const [keyOnly, setKeyOnly] = useState(false); // lọc chỉ dự án trọng điểm
   const [search, setSearch] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
@@ -116,7 +117,8 @@ export const ProjectsPage: React.FC = () => {
     const m = p.name.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()) || p.tender.packageCode.toLowerCase().includes(search.toLowerCase());
     const okStatus = statusFilter === 'ALL' || p.status === statusFilter;
     const okPhase = phaseFilter === 'ALL' || effectiveCurrentPhase(p) === phaseFilter;
-    return m && okStatus && okPhase;
+    const okKey = !keyOnly || !!p.isKeyProject;
+    return m && okStatus && okPhase && okKey;
   };
   const filtered = pakds.filter(matchFilters);
   // "Đơn của tôi" — PAKD do user hiện tại lập
@@ -196,10 +198,10 @@ export const ProjectsPage: React.FC = () => {
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
           {moduleTab === 'LIST' && (
-            <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
+            <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
           {moduleTab === 'MINE' && (
-            <ListView pakds={mineFiltered} counts={mineCounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} />
+            <ListView pakds={mineFiltered} counts={mineCounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
           {moduleTab === 'APPROVALS' && (
             <ApprovalQueue pakds={pendingPakd} simUser={simUser} comment={comment} setComment={setComment}
@@ -344,7 +346,8 @@ const ListView: React.FC<{
   pakds: Pakd[]; counts: Record<string, number>; statusFilter: string; setStatusFilter: (v: string) => void;
   search: string; setSearch: (v: string) => void; onOpen: (id: string) => void;
   phaseFilter: number | 'ALL'; setPhaseFilter: (v: number | 'ALL') => void; maxPhases: number;
-}> = ({ pakds, counts, statusFilter, setStatusFilter, search, setSearch, onOpen, phaseFilter, setPhaseFilter, maxPhases }) => (
+  keyOnly: boolean; setKeyOnly: (v: boolean) => void;
+}> = ({ pakds, counts, statusFilter, setStatusFilter, search, setSearch, onOpen, phaseFilter, setPhaseFilter, maxPhases, keyOnly, setKeyOnly }) => (
   <div>
     {/* status filter tabs */}
     <div className="flex border-b border-gray-200 mb-3 overflow-x-auto">
@@ -357,6 +360,10 @@ const ListView: React.FC<{
     <div className="flex items-center justify-between mb-2 gap-2">
       <button className={Btn.ghost}><FileSpreadsheet size={14} className="mr-1.5" />Export XLSX</button>
       <div className="flex items-center gap-2">
+        <button onClick={() => setKeyOnly(!keyOnly)} title="Lọc dự án trọng điểm"
+          className={`flex items-center gap-1 text-xs font-semibold border rounded px-2.5 py-1.5 transition-colors ${keyOnly ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-white border-gray-300 text-gray-500 hover:border-amber-400'}`}>
+          <Star size={13} className={keyOnly ? 'fill-amber-500 text-amber-500' : ''} />Trọng điểm
+        </button>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] text-gray-500 whitespace-nowrap">Giai đoạn:</span>
           <select value={String(phaseFilter)} onChange={(e) => setPhaseFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
@@ -390,7 +397,7 @@ const ListView: React.FC<{
                 <Td center muted>{i + 1}</Td>
                 <Td><button onClick={() => onOpen(p.id)} className="text-blue-600 font-semibold hover:underline">{p.id}</button></Td>
                 <Td mono>{p.masterCode ? <span className="text-gray-800 font-semibold">{p.masterCode}</span> : <span className="text-gray-300">—</span>}</Td>
-                <Td><span className="text-gray-800 font-medium">{p.name}</span></Td>
+                <Td><span className="text-gray-800 font-medium flex items-center gap-1">{p.isKeyProject && <Star size={12} className="fill-amber-500 text-amber-500 shrink-0" />}{p.name}</span></Td>
                 <Td mono>{p.tender.packageCode}</Td>
                 <Td>{p.customerName}</Td>
                 <Td>{p.tender.biddingMethod}</Td>
@@ -446,6 +453,8 @@ const DetailView: React.FC<{
   const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
   const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
   const [viewVersion, setViewVersion] = useState<number | null>(null); // xem lại 1 phiên bản đã chốt (read-only)
+  const [keyConfirm, setKeyConfirm] = useState(false); // popup xác nhận đánh dấu dự án trọng điểm
+  const toggleKeyProject = () => setPakd(p => ({ ...p, isKeyProject: !p.isKeyProject }));
   // Ảnh chụp thông tin chung của dự án (để diff & khôi phục khi điều chỉnh)
   type InfoSnap = { customerCode: string; customerName: string; domain: string; pmName: string; projStart: string; projEnd: string; revenue: number; expectedCost: number };
   const infoSnap = (p: Pakd): InfoSnap => ({ customerCode: p.customerCode, customerName: p.customerName, domain: p.domain || '', pmName: p.pmName || '', projStart: p.projStart || '', projEnd: p.projEnd || '', revenue: p.revenue, expectedCost: p.expectedCost ?? 0 });
@@ -712,8 +721,16 @@ const DetailView: React.FC<{
       <div className="border border-gray-200 rounded">
         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-gray-900">{pakd.name}</h2>
+            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              {pakd.name}
+              {pakd.isKeyProject && <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5"><Star size={11} className="fill-amber-500 text-amber-500" />TRỌNG ĐIỂM</span>}
+            </h2>
             <p className="text-[11px] text-gray-500 mt-0.5">Mã PAKD <b className="text-blue-600">{pakd.id}</b> • Phiên bản v{pakd.version} • Người lập: {pakd.creator}</p>
+            <button onClick={() => pakd.isKeyProject ? toggleKeyProject() : setKeyConfirm(true)}
+              className={`mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold border rounded px-2 py-1 transition-colors ${pakd.isKeyProject ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-gray-300 text-gray-500 hover:border-amber-400 hover:text-amber-600'}`}>
+              <Star size={13} className={pakd.isKeyProject ? 'fill-amber-500 text-amber-500' : ''} />
+              {pakd.isKeyProject ? 'Đã đánh dấu trọng điểm — bỏ đánh dấu' : 'Đánh dấu dự án trọng điểm'}
+            </button>
           </div>
           <div className="flex flex-col items-end gap-1 text-[11px]">
             <div className="flex items-center gap-1.5">
@@ -1001,6 +1018,25 @@ const DetailView: React.FC<{
                 className={`flex items-center px-3 py-1.5 text-white text-xs font-semibold rounded ${adjustReason.trim() ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-300 cursor-not-allowed'}`}>
                 <Check size={13} className="mr-1" />Bắt đầu điều chỉnh
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup xác nhận đánh dấu dự án trọng điểm */}
+      {keyConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setKeyConfirm(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200">
+              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center"><Star size={16} className="fill-amber-500 text-amber-500" /></span>
+              <h3 className="text-sm font-bold text-gray-800">Xác nhận dự án trọng điểm</h3>
+            </div>
+            <div className="px-5 py-4 text-[13px] text-gray-600">
+              Bạn có chắc chắn xác nhận <b className="text-amber-700">{pakd.name}</b> là <b>dự án trọng điểm</b> không? Dự án trọng điểm sẽ được ưu tiên hiển thị/theo dõi ở danh sách, bộ lọc và Dashboard BOD.
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
+              <button onClick={() => setKeyConfirm(false)} className={Btn.ghost}>Hủy</button>
+              <button onClick={() => { toggleKeyProject(); setKeyConfirm(false); }} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><Star size={13} className="mr-1 fill-white" />Xác nhận trọng điểm</button>
             </div>
           </div>
         </div>

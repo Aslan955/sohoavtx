@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, TrendingDown, Clock, CheckCircle2, FileEdit, Eye, Ban, Wallet, Layers } from 'lucide-react';
+import { AlertTriangle, TrendingDown, Clock, CheckCircle2, FileEdit, Eye, Ban, Wallet, Layers, Star } from 'lucide-react';
 import { Pakd, ProjectStep } from './projectTypes';
 import { khCode } from './projectData';
 import { PAKD_STATUS_LABEL, PAKD_PENDING_ROLE } from './projectWorkflow';
@@ -104,6 +104,7 @@ export const BodDashboard: React.FC<{ pakds: Pakd[]; simUser: { role: string; fu
   const redCount = alerts.filter(a => a.severity === 'RED').length;
 
   const total = pakds.length;
+  const keyProjects = pakds.filter(p => p.isKeyProject);
   const completed = pakds.filter(p => p.status === 'COMPLETED').length;
   const draft = pakds.filter(p => p.status === 'DRAFT').length;
   const returned = pakds.filter(p => p.status === 'RETURNED').length;
@@ -146,8 +147,9 @@ export const BodDashboard: React.FC<{ pakds: Pakd[]; simUser: { role: string; fu
   return (
     <div className="space-y-5">
       {/* KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
         <Kpi label="Tổng dự án" value={total} sub={`${draft} nháp • ${returned} bị trả lại`} />
+        <Kpi label="Dự án trọng điểm" value={<span className="flex items-center gap-1"><Star size={16} className="fill-amber-500 text-amber-500" />{keyProjects.length}</span>} tone={keyProjects.length > 0 ? 'amber' : 'default'} />
         <Kpi label="Đang trong luồng duyệt" value={inFlow} tone="blue" />
         <Kpi label={`Chờ tôi duyệt`} value={waitingMe} tone={waitingMe > 0 ? 'amber' : 'default'} sub={simUser.fullName} />
         <Kpi label="Hoàn tất" value={completed} tone="green" />
@@ -222,7 +224,7 @@ export const BodDashboard: React.FC<{ pakds: Pakd[]; simUser: { role: string; fu
               <tr key={p.id} className="border-b border-gray-100 hover:bg-blue-50/40">
                 <td className="px-3 py-2 text-center">{dot(worst)}</td>
                 <td className="px-3 py-2"><button onClick={() => onOpen(p.id)} className="text-blue-600 font-semibold font-mono hover:underline">{p.id}</button></td>
-                <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{p.name}</td>
+                <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate"><span className="flex items-center gap-1">{p.isKeyProject && <Star size={12} className="fill-amber-500 text-amber-500 shrink-0" />}{p.name}</span></td>
                 <td className="px-3 py-2"><span className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold text-[10px]">{khCode(curPhase(p) - 1)}</span></td>
                 <td className="px-3 py-2 text-gray-600">{PAKD_STATUS_LABEL[p.status as keyof typeof PAKD_STATUS_LABEL]}</td>
                 <td className="px-3 py-2 text-right text-gray-700">{fmtMoney(b)}</td>

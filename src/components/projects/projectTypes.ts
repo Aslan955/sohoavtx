@@ -174,6 +174,7 @@ export interface Pakd {
   planChangeLogs?: PlanChangeLog[]; // log điều chỉnh trực tiếp phương án sau khi hoàn tất (cũ → mới)
   versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
+  isKeyProject?: boolean; // dự án trọng điểm (đánh dấu để ưu tiên theo dõi)
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }
