@@ -172,7 +172,7 @@ export const ProjectsPage: React.FC = () => {
         <DetailView pakd={current} simUser={simUser} onBack={() => setSelectedId('')} setPakd={(fn) => setPakd(current.id, fn)}
           onSubmit={() => runAction(current.id, (p, l) => submitPakd(p, simUser.fullName, l, simUser.role))}
           onCreateCR={(reason, changes) => runAction(current.id, (p) => createChangeRequest(p, reason, changes, simUser.fullName))}
-          onAddOutsource={(label) => runAction(current.id, (p, l) => openOutsourceCode(p, label, simUser.fullName, l))}
+          onAddOutsource={(label) => runAction(current.id, (p, l) => openOutsourceCode(p, label, simUser.fullName, l, simUser.role))}
           onAddComment={(content) => setPakd(current.id, p => ({ ...p, comments: [...(p.comments || []), { id: rid('CM'), author: simUser.fullName, role: simUser.role, content, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16) }] }))}
           onCreateBudgetAdj={(sid, after, reason) => runAction(current.id, (p, l) => createBudgetAdjustment(p, sid, after, reason, simUser.fullName, l))}
           onDecideBudgetAdj={(sid, adjId, action, comment) => runAction(current.id, (p, l) => decideBudgetAdjustment(p, sid, adjId, simUser.role, action, comment, simUser.fullName, l))}
@@ -773,8 +773,8 @@ const DetailView: React.FC<{
                 </div>
               </div>
 
-              {/* Mở mã outsource: cho phép ngay sau khi tạo dự án (đã có mã sản xuất), kể cả còn nháp */}
-              {simUser.role === 'SALE' && pakd.productionCode && (
+              {/* Mở mã outsource: hiện ngay sau khi tạo dự án (đã có mã sản xuất) cho các vai trò tạo được dự án, kể cả còn nháp */}
+              {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && pakd.productionCode && (
                 <div className="flex items-center gap-2">
                   <input value={osLabel} onChange={(e) => setOsLabel(e.target.value)} placeholder="Nội dung thuê ngoài (mở mã con của mã sản xuất)..." className="flex-1 text-[11px] border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-blue-400" />
                   <button onClick={() => { if (osLabel.trim()) { onAddOutsource(osLabel); setOsLabel(''); } }} className={Btn.primary}><Plus size={13} className="mr-1" />Mở mã outsource</button>

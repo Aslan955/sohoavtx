@@ -302,14 +302,14 @@ export function decideBudgetAdjustment(pakd: Pakd, stepId: string, adjId: string
 const fmt = (v: number) => v.toLocaleString('vi-VN') + ' đ';
 
 // Mở mã outsource — mã con của mã sản xuất (chỉ khi đã có mã sản xuất, không trùng).
-export function openOutsourceCode(pakd: Pakd, label: string, actor: string, log: AuditLogEntry[]): { pakd: Pakd; error?: string } {
+export function openOutsourceCode(pakd: Pakd, label: string, actor: string, log: AuditLogEntry[], role: UserRole = 'SALE'): { pakd: Pakd; error?: string } {
   if (!pakd.productionCode) return { pakd, error: 'Chưa có mã sản xuất để mở mã outsource.' };
   if (!label.trim()) return { pakd, error: 'Nhập nội dung thuê ngoài cho mã outsource.' };
   const next = pakd.outsourceCodes.length + 1;
   const code = `${pakd.productionCode}.${next}`;
   if (pakd.outsourceCodes.some(o => o.code === code)) return { pakd, error: 'Mã outsource đã tồn tại.' };
   const updated: Pakd = { ...pakd, outsourceCodes: [...pakd.outsourceCodes, { id: rid('OS'), code, label }] };
-  pushAudit(log, updated, actor, 'SALE', 'Mở mã outsource', undefined, undefined, `Mã ${code} — ${label}`);
+  pushAudit(log, updated, actor, role, 'Mở mã outsource', undefined, undefined, `Mã ${code} — ${label}`);
   return { pakd: updated };
 }
 
