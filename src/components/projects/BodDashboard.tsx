@@ -34,11 +34,17 @@ function buildAlerts(pakds: Pakd[]): Alert[] {
     if (budget > 0 && spent > budget) {
       alerts.push({ pakdId: p.id, pakdName: p.name, severity: 'RED', title: `Chi thực tế vượt tổng ngân sách (${pct.toFixed(0)}%)`, detail: `Đã chi ${fmtMoney(spent)} / NS ${fmtMoney(budget)}`, icon: <AlertTriangle size={15} /> });
     } else {
-      const overPhases = p.steps
-        .map((st, i) => ({ code: khCode(i), b: (st.productionBudget || 0) + (st.businessBudget || 0), sp: st.actualSpent || 0 }))
-        .filter(x => x.b > 0 && x.sp > x.b);
-      if (overPhases.length > 0) {
-        alerts.push({ pakdId: p.id, pakdName: p.name, severity: 'AMBER', title: `Vượt ngân sách cục bộ ở ${overPhases.map(x => x.code).join(', ')}`, detail: overPhases.map(x => `${x.code}: ${fmtMoney(x.sp)}/${fmtMoney(x.b)}`).join(' • '), icon: <Wallet size={15} /> });
+      // Vượt theo loại: chi SX / chi KD (Kế toán import) so với NS phân bổ từng loại
+      const chiSX = (p.accountingSpends || []).reduce((s, x) => s + x.production, 0);
+      const chiKD = (p.accountingSpends || []).reduce((s, x) => s + x.business, 0);
+      const nsSX = p.steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
+      const nsKD = p.steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
+      const overCats = [
+        ...(nsSX > 0 && chiSX > nsSX ? [{ label: 'Sản xuất', chi: chiSX, ns: nsSX }] : []),
+        ...(nsKD > 0 && chiKD > nsKD ? [{ label: 'Kinh doanh', chi: chiKD, ns: nsKD }] : []),
+      ];
+      if (overCats.length > 0) {
+        alerts.push({ pakdId: p.id, pakdName: p.name, severity: 'AMBER', title: `Vượt ngân sách ${overCats.map(x => x.label).join(' & ')} (tổng vẫn trong NS)`, detail: overCats.map(x => `${x.label}: chi ${fmtMoney(x.chi)} / NS ${fmtMoney(x.ns)} (${((x.chi / x.ns) * 100).toFixed(0)}%)`).join(' • '), icon: <Wallet size={15} /> });
       } else if (budget > 0 && pct >= THRESHOLDS.nearBudgetPct) {
         alerts.push({ pakdId: p.id, pakdName: p.name, severity: 'AMBER', title: `Sắp chạm trần ngân sách (${pct.toFixed(0)}%)`, detail: `Đã chi ${fmtMoney(spent)} / NS ${fmtMoney(budget)}`, icon: <Wallet size={15} /> });
       }
