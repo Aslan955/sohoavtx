@@ -12,6 +12,7 @@ import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, makePhases, khCode,
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
+import { CustomersPage } from './CustomersPage';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
@@ -21,7 +22,7 @@ import {
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage,
 } from './projectWorkflow';
 
-type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD';
+type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'CUSTOMERS';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
@@ -191,12 +192,14 @@ export const ProjectsPage: React.FC = () => {
             {['BOD', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard BOD" count={countAlerts(pakds)} active={moduleTab === 'DASHBOARD'} onClick={() => setModuleTab('DASHBOARD')} />}
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
             <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
+            <ModTab label="Khách hàng" active={moduleTab === 'CUSTOMERS'} onClick={() => setModuleTab('CUSTOMERS')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
             <ModTab label="Phiếu điều chỉnh CP" count={pendingCR.length} active={moduleTab === 'CHANGES'} onClick={() => setModuleTab('CHANGES')} />
             <ModTab label="Nhật ký hệ thống" active={moduleTab === 'AUDIT'} onClick={() => setModuleTab('AUDIT')} />
           </div>
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
+          {moduleTab === 'CUSTOMERS' && <CustomersPage pakds={pakds} canEdit={['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role)} />}
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
