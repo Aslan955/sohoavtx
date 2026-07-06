@@ -909,9 +909,6 @@ const DetailView: React.FC<{
                 </div>
               )}
 
-              {/* Chi thực tế (Kế toán import) — cấp dự án */}
-              {viewVersion === null && !adjustMode && <ActualSpendPanel pakd={pakd} />}
-
               {(() => {
                 const snap = viewVersion !== null ? (pakd.versionSnaps || []).find(s => s.version === viewVersion) : null;
                 if (snap) return <SnapshotTable snap={snap.steps} versionLabel={`V${snap.version}`} by={snap.by} at={snap.at} />;
@@ -1136,58 +1133,27 @@ const BudgetSummaryBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
     </div>
   );
 };
-// Panel chi thực tế cấp dự án (do Kế toán import) — thay cho các cột chi thực tế theo KH
-const ActualSpendPanel: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
+// Thanh compact: chi thực tế do Kế toán import (SX • KD • cập nhật gần nhất) — cùng phong cách BudgetSummaryBar
+const AccountingSpendBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
   const spends = [...(pakd.accountingSpends || [])].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
-  const nsSX = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
-  const nsKD = pakd.steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
   const chiSX = spends.reduce((s, x) => s + x.production, 0);
   const chiKD = spends.reduce((s, x) => s + x.business, 0);
-  const cell = (label: string, chi: number, ns: number) => {
-    const pct = ns > 0 ? (chi / ns) * 100 : 0; const over = chi > ns && ns > 0;
-    return (
-      <div className={`border rounded px-3 py-2 min-w-[180px] ${over ? 'border-red-200 bg-red-50/60' : 'border-amber-200 bg-amber-50/40'}`}>
-        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(chi)}</p>
-        <p className="text-[10px] text-gray-500">/ NS {fmtFull(ns)} <b className={over ? 'text-red-600' : 'text-gray-600'}>({ns > 0 ? `${pct.toFixed(0)}%` : '—'})</b></p>
-      </div>
-    );
-  };
+  const detail = spends.map(s => `${s.at}: SX ${fmtFull(s.production)} • KD ${fmtFull(s.business)}${s.by ? ` (${s.by})` : ''}`).join('\n');
+  const sep = <span className="w-px h-4 bg-amber-200" />;
   return (
-    <div className="border border-amber-200 rounded">
-      <div className="bg-amber-50/60 border-b border-amber-200 px-3 py-1.5 text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
-        <Wallet size={13} />Chi thực tế (Kế toán đã chi)
-        <span className="ml-auto text-[10px] font-normal text-gray-500 normal-case">{spends.length > 0 ? `Cập nhật gần nhất: ${spends[0].at}` : 'Chưa có dữ liệu — Kế toán import ở tab "Chi thực tế (Kế toán)"'}</span>
-      </div>
-      <div className="p-3 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {cell('Chi Sản xuất', chiSX, nsSX)}
-          {cell('Chi Kinh doanh', chiKD, nsKD)}
-          {cell('Tổng chi thực tế', chiSX + chiKD, nsSX + nsKD)}
-        </div>
-        {spends.length > 0 && (
-          <table className="w-full text-[11px] border-collapse border border-gray-200">
-            <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <th className="px-2 py-1 text-left border-r border-gray-200">Ngày update</th>
-              <th className="px-2 py-1 text-right border-r border-gray-200">Chi sản xuất</th>
-              <th className="px-2 py-1 text-right border-r border-gray-200">Chi kinh doanh</th>
-              <th className="px-2 py-1 text-right border-r border-gray-200">Tổng</th>
-              <th className="px-2 py-1 text-left">Người import</th>
-            </tr></thead>
-            <tbody>
-              {spends.map(s => (
-                <tr key={s.id} className="border-b border-gray-100">
-                  <td className="px-2 py-1 font-mono border-r border-gray-100">{s.at}</td>
-                  <td className="px-2 py-1 text-right border-r border-gray-100 text-amber-700 font-semibold">{fmtFull(s.production)}</td>
-                  <td className="px-2 py-1 text-right border-r border-gray-100 text-amber-700 font-semibold">{fmtFull(s.business)}</td>
-                  <td className="px-2 py-1 text-right border-r border-gray-100 font-bold text-gray-800">{fmtFull(s.production + s.business)}</td>
-                  <td className="px-2 py-1 text-gray-500">{s.by || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+    <div title={detail || undefined} className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border border-amber-200 bg-amber-50/50 rounded px-3 py-1.5">
+      <span className="flex items-center gap-1 text-amber-800 font-semibold"><Wallet size={12} />Kế toán thực chi:</span>
+      {spends.length === 0 ? (
+        <span className="text-gray-400 italic">Chưa có — import ở tab "Chi thực tế (Kế toán)"</span>
+      ) : (
+        <>
+          <span className="text-gray-500">SX: <b className="text-amber-700 text-xs">{fmtFull(chiSX)}</b></span>
+          {sep}
+          <span className="text-gray-500">KD: <b className="text-amber-700 text-xs">{fmtFull(chiKD)}</b></span>
+          {sep}
+          <span className="text-gray-500">Cập nhật: <b className="text-gray-700 font-mono">{spends[0].at}</b> <span className="text-gray-400">({spends.length} lần)</span></span>
+        </>
+      )}
     </div>
   );
 };
@@ -2045,6 +2011,7 @@ const PhaseTable: React.FC<{
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <BudgetSummaryBar pakd={pakd} />
+          <AccountingSpendBar pakd={pakd} />
           {editable && (
             <>
               <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
@@ -2065,6 +2032,7 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Mục tiêu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Kết quả đầu ra</th>
               <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách phân bổ (đ)</th>
+              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Kế toán thực chi (đ)</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}>Lịch sử NS</th>
             </tr>
@@ -2072,6 +2040,9 @@ const PhaseTable: React.FC<{
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Kinh doanh</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '110px' }}>Tổng</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '105px' }}>Sản xuất</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '105px' }}>Kinh doanh</th>
+              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '110px' }}>Tổng</th>
             </tr>
           </thead>
           <tbody>
@@ -2104,6 +2075,11 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <NumberInput value={s.businessBudget || 0} onChange={(v) => onUpd(s.id, { businessBudget: v })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
 
+                  {/* Kế toán thực chi — dữ liệu cấp dự án (xem dòng Tổng) */}
+                  <Td right className="bg-amber-50/20"><span className="text-gray-300">—</span></Td>
+                  <Td right className="bg-amber-50/20"><span className="text-gray-300">—</span></Td>
+                  <Td right className="bg-amber-50/20"><span className="text-gray-300">—</span></Td>
+
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   <Td center>
                     <div className="flex items-center justify-center gap-1">
@@ -2129,6 +2105,18 @@ const PhaseTable: React.FC<{
               <Td right>{fmtFull(totSX)}</Td>
               <Td right>{fmtFull(totKD)}</Td>
               <Td right>{fmtFull(grand)}</Td>
+              {(() => {
+                const chiSX = (pakd.accountingSpends || []).reduce((s, x) => s + x.production, 0);
+                const chiKD = (pakd.accountingSpends || []).reduce((s, x) => s + x.business, 0);
+                const overSX = chiSX > totSX && totSX > 0, overKD = chiKD > totKD && totKD > 0, overAll = chiSX + chiKD > grand && grand > 0;
+                return (
+                  <>
+                    <Td right className={`bg-amber-100/50 ${overSX ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiSX)}</Td>
+                    <Td right className={`bg-amber-100/50 ${overKD ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiKD)}</Td>
+                    <Td right className={`bg-amber-100/50 ${overAll ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiSX + chiKD)}</Td>
+                  </>
+                );
+              })()}
               <Td></Td>
               <Td></Td>
             </tr>
