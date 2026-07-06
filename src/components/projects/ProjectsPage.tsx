@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell, Star,
+  Upload, Download, RotateCcw, Bell, Star, Wallet,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
@@ -13,6 +13,8 @@ import {
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
+import { AccountingImportPage, accountingTotal } from './AccountingImportPage';
+import { AccountingSpend } from './projectTypes';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
@@ -22,7 +24,7 @@ import {
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage,
 } from './projectWorkflow';
 
-type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'CUSTOMERS';
+type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'CUSTOMERS' | 'ACCOUNTING';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
@@ -194,6 +196,7 @@ export const ProjectsPage: React.FC = () => {
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
             <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
             <ModTab label="Khách hàng" active={moduleTab === 'CUSTOMERS'} onClick={() => setModuleTab('CUSTOMERS')} />
+            <ModTab label="Chi thực tế (Kế toán)" active={moduleTab === 'ACCOUNTING'} onClick={() => setModuleTab('ACCOUNTING')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
             <ModTab label="Phiếu điều chỉnh CP" count={pendingCR.length} active={moduleTab === 'CHANGES'} onClick={() => setModuleTab('CHANGES')} />
             <ModTab label="Nhật ký hệ thống" active={moduleTab === 'AUDIT'} onClick={() => setModuleTab('AUDIT')} />
@@ -201,6 +204,9 @@ export const ProjectsPage: React.FC = () => {
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
           {moduleTab === 'CUSTOMERS' && <CustomersPage pakds={pakds} customers={customers} setCustomers={setCustomers} canEdit={['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role)} />}
+          {moduleTab === 'ACCOUNTING' && <AccountingImportPage pakds={pakds} simUser={simUser} onImport={(items) => {
+            setPakds(prev => prev.map(p => { const mine = items.filter(it => it.pakdId === p.id).map(it => it.spend); return mine.length ? { ...p, accountingSpends: [...(p.accountingSpends || []), ...mine] } : p; }));
+          }} />}
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
@@ -903,6 +909,9 @@ const DetailView: React.FC<{
                 </div>
               )}
 
+              {/* Chi thực tế (Kế toán import) — cấp dự án */}
+              {viewVersion === null && !adjustMode && <ActualSpendPanel pakd={pakd} />}
+
               {(() => {
                 const snap = viewVersion !== null ? (pakd.versionSnaps || []).find(s => s.version === viewVersion) : null;
                 if (snap) return <SnapshotTable snap={snap.steps} versionLabel={`V${snap.version}`} by={snap.by} at={snap.at} />;
@@ -1103,31 +1112,82 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2">{children}</h3>
 );
 
-// Thanh tổng hợp ngân sách 1 dòng: NS đã xin • Đã chi (%) • trạng thái vượt (tổng đỏ / cục bộ theo KH cam / trong NS xanh).
-const BudgetSummaryBar: React.FC<{ steps: ProjectStep[] }> = ({ steps }) => {
-  const totalBudget = steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
-  const totalSpent = steps.reduce((s, st) => s + (st.actualSpent || 0), 0);
+// Thanh tổng hợp: NS đã xin • Đã chi (Kế toán import) (%) • trạng thái vượt.
+const BudgetSummaryBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
+  const totalBudget = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
+  const t = (pakd.accountingSpends || []).reduce((a, s) => ({ prod: a.prod + s.production, biz: a.biz + s.business }), { prod: 0, biz: 0 });
+  const totalSpent = t.prod + t.biz;
   const pct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
   const overTotal = totalSpent > totalBudget && totalBudget > 0;
-  // Các giai đoạn vượt ngân sách của chính nó
-  const overPhases = steps
-    .map((st, i) => ({ code: khCode(i), budget: (st.productionBudget || 0) + (st.businessBudget || 0), spent: st.actualSpent || 0 }))
-    .filter(x => x.budget > 0 && x.spent > x.budget);
-  const overDetail = overPhases.map(x => `${x.code}: chi ${fmtFull(x.spent)} / NS ${fmtFull(x.budget)} (${((x.spent / x.budget) * 100).toFixed(0)}%)`).join('\n');
   const sep = <span className="w-px h-4 bg-gray-200" />;
   return (
     <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border border-gray-200 bg-gray-50/70 rounded px-3 py-1.5">
       <span className="text-gray-500">NS đã xin: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b></span>
       {sep}
-      <span className="text-gray-500">Đã chi: <b className={`text-xs ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</b> <span className={`font-semibold ${overTotal ? 'text-red-600' : 'text-gray-600'}`}>({totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'})</span></span>
+      <span className="text-gray-500">Đã chi (KT): <b className={`text-xs ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</b> <span className={`font-semibold ${overTotal ? 'text-red-600' : 'text-gray-600'}`}>({totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'})</span></span>
       {sep}
-      {overTotal ? (
+      {totalSpent === 0 ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-semibold">Chưa có chi thực tế</span>
+      ) : overTotal ? (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">⚠ Đã vượt tổng NS</span>
-      ) : overPhases.length > 0 ? (
-        <span title={overDetail} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-bold cursor-help">⚠ Vượt ở {overPhases.map(x => x.code).join(', ')}</span>
       ) : (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold">✓ Trong ngân sách</span>
       )}
+    </div>
+  );
+};
+// Panel chi thực tế cấp dự án (do Kế toán import) — thay cho các cột chi thực tế theo KH
+const ActualSpendPanel: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
+  const spends = [...(pakd.accountingSpends || [])].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+  const nsSX = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
+  const nsKD = pakd.steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
+  const chiSX = spends.reduce((s, x) => s + x.production, 0);
+  const chiKD = spends.reduce((s, x) => s + x.business, 0);
+  const cell = (label: string, chi: number, ns: number) => {
+    const pct = ns > 0 ? (chi / ns) * 100 : 0; const over = chi > ns && ns > 0;
+    return (
+      <div className={`border rounded px-3 py-2 min-w-[180px] ${over ? 'border-red-200 bg-red-50/60' : 'border-amber-200 bg-amber-50/40'}`}>
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+        <p className={`text-sm font-bold ${over ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(chi)}</p>
+        <p className="text-[10px] text-gray-500">/ NS {fmtFull(ns)} <b className={over ? 'text-red-600' : 'text-gray-600'}>({ns > 0 ? `${pct.toFixed(0)}%` : '—'})</b></p>
+      </div>
+    );
+  };
+  return (
+    <div className="border border-amber-200 rounded">
+      <div className="bg-amber-50/60 border-b border-amber-200 px-3 py-1.5 text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
+        <Wallet size={13} />Chi thực tế (Kế toán đã chi)
+        <span className="ml-auto text-[10px] font-normal text-gray-500 normal-case">{spends.length > 0 ? `Cập nhật gần nhất: ${spends[0].at}` : 'Chưa có dữ liệu — Kế toán import ở tab "Chi thực tế (Kế toán)"'}</span>
+      </div>
+      <div className="p-3 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {cell('Chi Sản xuất', chiSX, nsSX)}
+          {cell('Chi Kinh doanh', chiKD, nsKD)}
+          {cell('Tổng chi thực tế', chiSX + chiKD, nsSX + nsKD)}
+        </div>
+        {spends.length > 0 && (
+          <table className="w-full text-[11px] border-collapse border border-gray-200">
+            <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
+              <th className="px-2 py-1 text-left border-r border-gray-200">Ngày update</th>
+              <th className="px-2 py-1 text-right border-r border-gray-200">Chi sản xuất</th>
+              <th className="px-2 py-1 text-right border-r border-gray-200">Chi kinh doanh</th>
+              <th className="px-2 py-1 text-right border-r border-gray-200">Tổng</th>
+              <th className="px-2 py-1 text-left">Người import</th>
+            </tr></thead>
+            <tbody>
+              {spends.map(s => (
+                <tr key={s.id} className="border-b border-gray-100">
+                  <td className="px-2 py-1 font-mono border-r border-gray-100">{s.at}</td>
+                  <td className="px-2 py-1 text-right border-r border-gray-100 text-amber-700 font-semibold">{fmtFull(s.production)}</td>
+                  <td className="px-2 py-1 text-right border-r border-gray-100 text-amber-700 font-semibold">{fmtFull(s.business)}</td>
+                  <td className="px-2 py-1 text-right border-r border-gray-100 font-bold text-gray-800">{fmtFull(s.production + s.business)}</td>
+                  <td className="px-2 py-1 text-gray-500">{s.by || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 };
@@ -1984,7 +2044,7 @@ const PhaseTable: React.FC<{
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <BudgetSummaryBar steps={steps} />
+          <BudgetSummaryBar pakd={pakd} />
           {editable && (
             <>
               <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
@@ -2005,7 +2065,6 @@ const PhaseTable: React.FC<{
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Mục tiêu</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '260px' }}>Kết quả đầu ra</th>
               <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center">Ngân sách phân bổ (đ)</th>
-              <th colSpan={3} className="px-2 py-1.5 font-semibold border-r border-b border-gray-300 text-center text-amber-700 bg-amber-50/40">Chi thực tế tính đến hiện tại</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold border-r border-gray-300" style={{ minWidth: '130px' }}>Tài liệu đính kèm</th>
               <th rowSpan={2} className="px-2 py-1.5 font-semibold text-center" style={{ minWidth: '70px' }}>Lịch sử NS</th>
             </tr>
@@ -2013,9 +2072,6 @@ const PhaseTable: React.FC<{
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Sản xuất</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '105px' }}>Kinh doanh</th>
               <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '110px' }}>Tổng</th>
-              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '150px' }}>Số tiền lần này (đ)</th>
-              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '120px' }}>Tổng chi phí các lần (đ)</th>
-              <th className="px-2 py-1 font-semibold border-r border-gray-300 text-right text-amber-700 bg-amber-50/40" style={{ minWidth: '85px' }}>% / NS</th>
             </tr>
           </thead>
           <tbody>
@@ -2047,29 +2103,6 @@ const PhaseTable: React.FC<{
                   <Td right>{editable ? <NumberInput value={s.productionBudget || 0} onChange={(v) => onUpd(s.id, { productionBudget: v })} className={numInp} /> : fmtFull(s.productionBudget || 0)}</Td>
                   <Td right>{editable ? <NumberInput value={s.businessBudget || 0} onChange={(v) => onUpd(s.id, { businessBudget: v })} className={numInp} /> : fmtFull(s.businessBudget || 0)}</Td>
                   <Td right><b>{fmtFull(rowTotal)}</b></Td>
-                  
-                  {/* Số tiền lần này: nhập khoản chi mỗi lần, có nút cập nhật */}
-                  <Td right className="bg-amber-50/20">
-                    {canEditSpent
-                      ? <SpentCell nextTime={(s.spentLog?.length || 0) + 1} onAdd={(inc) => onUpdSpent(s.id, inc)} />
-                      : (s.spentLog?.length || 0) > 0
-                        ? <span className="font-semibold text-amber-800">{fmtFull(s.spentLog![0].amount)}</span>
-                        : <span className="text-gray-300">—</span>}
-                    {(s.spentLog?.length || 0) > 0 && (
-                      <button onClick={() => onShowHistory(i)} title="Xem toàn bộ lịch sử chi thực tế" className="block w-full mt-0.5 text-[9px] text-blue-600 hover:underline text-right leading-tight">
-                        Lần gần nhất: {s.spentLog!.length} • {s.spentLog![0].at}
-                        {s.spentLog!.length > 1 && <span className="text-gray-400"> (xem {s.spentLog!.length} lần)</span>}
-                      </button>
-                    )}
-                  </Td>
-                  {/* Tổng chi phí các lần (cộng dồn) — sửa được khi đơn chưa duyệt (có log) */}
-                  <Td right className="bg-amber-50/20">
-                    {canEditSpentTotal && (s.spentLog?.length || 0) > 0
-                      ? <TotalSpentCell value={rowActual} over={rowActual > rowTotal && rowTotal > 0} lockedMin={lockedSpentTotal(s)} onCommit={(v) => onEditSpent(s.id, v)} />
-                      : <span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{fmtFull(rowActual)}</span>}
-                    {(s.spentLog?.length || 0) > 0 && <span className="block text-[9px] text-gray-400">{s.spentLog!.length} lần{!canEditSpentTotal ? ' • đã khóa sau duyệt' : ''}</span>}
-                  </Td>
-                  <Td right className="bg-amber-50/20"><span className={rowActual > rowTotal && rowTotal > 0 ? 'text-red-600 font-bold' : 'font-semibold text-amber-800'}>{rowTotal > 0 ? `${rowActualPct.toFixed(0)}%` : '—'}</span></Td>
 
                   <Td><AttachCell step={s} editable={editable} onUpd={(patch) => onUpd(s.id, patch)} /></Td>
                   <Td center>
@@ -2096,17 +2129,6 @@ const PhaseTable: React.FC<{
               <Td right>{fmtFull(totSX)}</Td>
               <Td right>{fmtFull(totKD)}</Td>
               <Td right>{fmtFull(grand)}</Td>
-              {(() => {
-                const grandActual = steps.reduce((sum, st) => sum + (st.actualSpent || 0), 0);
-                const grandActualPct = grand > 0 ? (grandActual / grand) * 100 : 0;
-                return (
-                  <>
-                    <Td right className="bg-amber-100/50 text-amber-900">—</Td>
-                    <Td right className="bg-amber-100/50 text-amber-900">{fmtFull(grandActual)}</Td>
-                    <Td right className="bg-amber-100/50 text-amber-900">{grand > 0 ? `${grandActualPct.toFixed(0)}%` : '—'}</Td>
-                  </>
-                );
-              })()}
               <Td></Td>
               <Td></Td>
             </tr>

@@ -175,6 +175,7 @@ export interface Pakd {
   versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   isKeyProject?: boolean; // dự án trọng điểm (đánh dấu để ưu tiên theo dõi)
+  accountingSpends?: AccountingSpend[]; // chi thực tế do Kế toán import hàng tháng (theo dự án)
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }
@@ -269,6 +270,16 @@ export interface PakdComment {
   role: UserRole;
   content: string;
   createdAt: string;
+}
+
+// Một dòng chi thực tế do Kế toán import (mỗi tháng 1 dòng / dự án).
+export interface AccountingSpend {
+  id: string;
+  at: string;         // ngày update (từ file import)
+  production: number; // chi sản xuất
+  business: number;   // chi kinh doanh
+  by?: string;        // người import (Kế toán)
+  importedAt?: string;// thời điểm thực hiện import
 }
 
 export interface AuditLogEntry {

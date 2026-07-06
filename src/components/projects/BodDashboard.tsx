@@ -16,7 +16,8 @@ const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.object
 const curPhase = (p: Pakd) => Math.max(p.currentPhase || 1, p.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0));
 
 const budgetOf = (p: Pakd) => p.steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
-const spentOf = (p: Pakd) => p.steps.reduce((s, st) => s + (st.actualSpent || 0), 0);
+// Chi thực tế = tổng do Kế toán import (sản xuất + kinh doanh)
+const spentOf = (p: Pakd) => (p.accountingSpends || []).reduce((s, x) => s + x.production + x.business, 0);
 
 // ===================== Quy tắc cảnh báo =====================
 type Severity = 'RED' | 'AMBER' | 'BLUE';
