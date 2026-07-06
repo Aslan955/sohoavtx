@@ -12,7 +12,7 @@ import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, makePhases, khCode,
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
-import { CustomersPage } from './CustomersPage';
+import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
   canEditDirect, submitPakd, approvePakd, createChangeRequest, approveChangeRequest,
@@ -73,6 +73,7 @@ const PakdStatusCell: React.FC<{ status: string }> = ({ status }) => (
 
 export const ProjectsPage: React.FC = () => {
   const [pakds, setPakds] = useState<Pakd[]>(INITIAL_PAKDS);
+  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS); // danh mục khách hàng dùng chung
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [moduleTab, setModuleTab] = useState<ModuleTab>('LIST');
   const [selectedId, setSelectedId] = useState('');
@@ -199,7 +200,7 @@ export const ProjectsPage: React.FC = () => {
           </div>
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
-          {moduleTab === 'CUSTOMERS' && <CustomersPage pakds={pakds} canEdit={['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role)} />}
+          {moduleTab === 'CUSTOMERS' && <CustomersPage pakds={pakds} customers={customers} setCustomers={setCustomers} canEdit={['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role)} />}
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
@@ -219,7 +220,8 @@ export const ProjectsPage: React.FC = () => {
         </>
       )}
 
-      {createOpen && <CreateModal onClose={() => setCreateOpen(false)} creator={simUser.fullName}
+      {createOpen && <CreateModal onClose={() => setCreateOpen(false)} creator={simUser.fullName} customers={customers}
+        onGotoCustomers={() => { setCreateOpen(false); setModuleTab('CUSTOMERS'); }}
         onCreate={(p) => { setPakds([p, ...pakds]); setSelectedId(p.id); setCreateOpen(false); }} />}
     </div>
   );
@@ -2348,26 +2350,28 @@ const RevisePlanModal: React.FC<{ pakd: Pakd; simUser: any; onClose: () => void;
 };
 
 // ===================== CREATE MODAL =====================
-const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p: Pakd) => void }> = ({ onClose, creator, onCreate }) => {
+const CreateModal: React.FC<{ onClose: () => void; creator: string; customers: Customer[]; onGotoCustomers: () => void; onCreate: (p: Pakd) => void }> = ({ onClose, creator, customers, onGotoCustomers, onCreate }) => {
   const [f, setF] = useState({
-    name: '', customerName: '', customerCode: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0] as string, domain: DOMAINS[0],
+    name: '', customerId: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0] as string, domain: DOMAINS[0],
     projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
   });
   const [err, setErr] = useState('');
+  const selectedCustomer = customers.find(c => c.id === f.customerId);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.name.trim() || !f.customerName.trim()) { setErr('Cần nhập Tên dự án và Tên khách hàng.'); return; }
+    if (!f.name.trim()) { setErr('Cần nhập Tên dự án.'); return; }
+    if (!selectedCustomer) { setErr('Vui lòng chọn khách hàng từ danh mục.'); return; }
     if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
-    // Mã dự án sinh tự động ngay khi tạo (không chờ GĐ Khối duyệt)
-    const codes = generateCodes({} as Pakd);
+    // Mã tổng dự án = <mã khách hàng>.<3 số random> (sinh ngay khi tạo)
+    const codes = generateCodes(selectedCustomer.code);
     onCreate({
-      id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: f.customerName,
-      customerCode: f.customerCode.trim().toUpperCase() || f.customerName.slice(0, 4).toUpperCase(),
+      id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: selectedCustomer.name,
+      customerCode: selectedCustomer.code,
       creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: f.domain, projStart: f.projStart, projEnd: f.projEnd,
+      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: selectedCustomer.domain || f.domain, projStart: f.projStart, projEnd: f.projEnd,
       expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
       ...codes,
-      tender: { packageCode: '', investor: f.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
+      tender: { packageCode: '', investor: selectedCustomer.name, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
       revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
     });
   };
@@ -2386,8 +2390,17 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; onCreate: (p
         {err && <p className="text-xs text-red-600 font-medium px-5 pt-3">{err}</p>}
         <form onSubmit={submit} className="p-5 grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1"><label className={lab}>Tên dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Tên khách hàng *</label><input value={f.customerName} onChange={(e) => setF({ ...f, customerName: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Mã khách hàng</label><input value={f.customerCode} onChange={(e) => setF({ ...f, customerCode: e.target.value })} placeholder="Tự sinh nếu để trống" className={inp} /></div>
+          <div className="col-span-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <label className={lab}>Khách hàng * <span className="text-gray-400 font-normal">(chọn từ danh mục — mã tổng dự án lấy theo mã khách hàng)</span></label>
+              <button type="button" onClick={onGotoCustomers} className="text-[11px] text-blue-600 hover:underline">+ Thêm khách hàng mới</button>
+            </div>
+            <select value={f.customerId} onChange={(e) => setF({ ...f, customerId: e.target.value })} className={inp}>
+              <option value="">— Chọn khách hàng —</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
+            </select>
+            {selectedCustomer && <p className="text-[10px] text-gray-500">Mã KH: <b className="font-mono text-blue-700">{selectedCustomer.code}</b> → Mã tổng dự án sẽ là <b className="font-mono text-blue-700">{selectedCustomer.code}.xxx</b></p>}
+          </div>
           <div className="space-y-1"><label className={lab}>Giám đốc khối</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Khối duyệt) —</option>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Kinh doanh duyệt) —</option>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>

@@ -97,7 +97,7 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[], role
   let updated: Pakd = { ...pakd, status: firstStage, approvalHistory: [submitRecord, ...pakd.approvalHistory] };
   // Nếu bỏ qua cả 2 cấp GĐ → vào thẳng Kế toán thì khóa chi phí ngay.
   if (firstStage === 'PENDING_ACCOUNTANT' && !updated.locked) {
-    const codes = updated.masterCode ? {} : generateCodes(updated);
+    const codes = updated.masterCode ? {} : generateCodes(updated.customerCode);
     updated = { ...updated, ...codes, locked: true };
   }
   pushAudit(log, updated, actor, role, 'Nộp PAKD trình duyệt', old, updated.status, `Nộp PAKD vào hàng đợi phê duyệt ${PAKD_STATUS_LABEL[firstStage]}.`);
@@ -107,13 +107,15 @@ export function submitPakd(pakd: Pakd, actor: string, log: AuditLogEntry[], role
 // Các đuôi mã bị loại trừ (2 chữ số cuối) — không cấp cho mã dự án.
 const EXCLUDED_CODE_SUFFIXES = [49, 53];
 
-export function generateCodes(pakd: Pakd): Pick<Pakd, 'masterCode' | 'businessCode' | 'productionCode'> {
+// Sinh mã dự án: mã tổng = <mã khách hàng>.<3 số random> (loại đuôi 49/53). Mã KD = .1, mã SX = .2.
+export function generateCodes(customerCode: string): Pick<Pakd, 'masterCode' | 'businessCode' | 'productionCode'> {
+  const prefix = (customerCode || '022').trim();
   let seq = Math.floor(100 + Math.random() * 899);
   // Bỏ qua các mã có đuôi (2 chữ số cuối) nằm trong danh sách loại trừ.
   while (EXCLUDED_CODE_SUFFIXES.includes(seq % 100)) {
     seq = Math.floor(100 + Math.random() * 899);
   }
-  const master = `022.${seq}`;
+  const master = `${prefix}.${seq}`;
   return { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2` };
 }
 
@@ -155,7 +157,7 @@ export function approvePakd(pakd: Pakd, role: UserRole, action: ApprovalAction |
 
   // Vào cấp Kế toán -> khóa chi phí (mã đã sinh khi tạo; sinh bù nếu dữ liệu cũ chưa có)
   if (next === 'PENDING_ACCOUNTANT' && !updated.locked) {
-    const codes = updated.masterCode ? {} : generateCodes(updated);
+    const codes = updated.masterCode ? {} : generateCodes(updated.customerCode);
     updated = { ...updated, ...codes, locked: true };
     pushAudit(log, updated, 'SYSTEM', 'ADMIN', 'Khóa chi phí', old, next, `Chi phí đã khóa — mọi thay đổi sau đây phải qua phiếu điều chỉnh.`);
   }

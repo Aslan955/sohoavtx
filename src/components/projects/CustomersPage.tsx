@@ -22,7 +22,7 @@ const now = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
 const rid = () => `CUS-${Math.random().toString(36).slice(2, 8)}`;
 
 // Sinh mã khách hàng kế tiếp: KH0001, KH0002...
-const nextCode = (list: Customer[]): string => {
+export const nextCustomerCode = (list: Customer[]): string => {
   const max = list.reduce((mx, c) => {
     const m = /^KH(\d+)$/.exec(c.code);
     return m ? Math.max(mx, Number(m[1])) : mx;
@@ -30,7 +30,7 @@ const nextCode = (list: Customer[]): string => {
   return `KH${String(max + 1).padStart(4, '0')}`;
 };
 
-const INITIAL_CUSTOMERS: Customer[] = [
+export const INITIAL_CUSTOMERS: Customer[] = [
   { id: rid(), code: 'KH0001', name: 'Tập đoàn Viễn thông Quân đội (Viettel)', taxCode: '0100109106', contactPerson: 'Trần Văn Hùng', phone: '024 6255 6789', email: 'hungtv@viettel.com.vn', address: 'Số 1 Trần Hữu Dực, Nam Từ Liêm, Hà Nội', domain: 'GOV', note: 'Khách hàng chiến lược', createdAt: '2026-05-01 09:00' },
   { id: rid(), code: 'KH0002', name: 'Ngân hàng TMCP Đầu tư và Phát triển VN (BIDV)', taxCode: '0100150619', contactPerson: 'Nguyễn Thị Lan', phone: '0243 220 5544', email: 'lan.nt@bidv.com.vn', address: 'Tháp BIDV, 194 Trần Quang Khải, Hà Nội', domain: 'BFSI', createdAt: '2026-05-03 10:30' },
   { id: rid(), code: 'KH0003', name: 'Sở Thông tin và Truyền thông Bắc Ninh', taxCode: '2300112233', contactPerson: 'Lê Quốc Anh', phone: '0222 3822 100', email: 'stttt@bacninh.gov.vn', address: 'TP Bắc Ninh, Bắc Ninh', domain: 'GOV', createdAt: '2026-05-10 14:00' },
@@ -38,8 +38,7 @@ const INITIAL_CUSTOMERS: Customer[] = [
 ];
 
 // ===================== Màn hình Quản lý khách hàng =====================
-export const CustomersPage: React.FC<{ pakds: Pakd[]; canEdit: boolean }> = ({ pakds, canEdit }) => {
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
+export const CustomersPage: React.FC<{ pakds: Pakd[]; canEdit: boolean; customers: Customer[]; setCustomers: React.Dispatch<React.SetStateAction<Customer[]>> }> = ({ pakds, canEdit, customers, setCustomers }) => {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Customer | 'new' | null>(null);
   const [viewing, setViewing] = useState<Customer | null>(null);
@@ -115,7 +114,7 @@ export const CustomersPage: React.FC<{ pakds: Pakd[]; canEdit: boolean }> = ({ p
       </div>
 
       {viewing && <CustomerView customer={viewing} projects={pakds.filter(p => p.customerCode === viewing.code || p.customerName.trim().toLowerCase() === viewing.name.trim().toLowerCase())} onClose={() => setViewing(null)} />}
-      {editing && <CustomerModal initial={editing === 'new' ? null : editing} suggestedCode={nextCode(customers)} onClose={() => setEditing(null)} onSave={save} />}
+      {editing && <CustomerModal initial={editing === 'new' ? null : editing} suggestedCode={nextCustomerCode(customers)} onClose={() => setEditing(null)} onSave={save} />}
     </div>
   );
 };
