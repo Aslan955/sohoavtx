@@ -913,13 +913,15 @@ const DetailView: React.FC<{
                 const snap = viewVersion !== null ? (pakd.versionSnaps || []).find(s => s.version === viewVersion) : null;
                 if (snap) return <SnapshotTable snap={snap.steps} versionLabel={`V${snap.version}`} by={snap.by} at={snap.at} />;
                 return (
-                  <>
-                    <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
-                      canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
-                      onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                      onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
+                  <div className="grid grid-cols-1 2xl:grid-cols-[1fr_400px] gap-4 items-start">
+                    <div className="min-w-0">
+                      <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                        canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
+                        onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                        onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
+                    </div>
                     <AccountingSpendTable pakd={pakd} />
-                  </>
+                  </div>
                 );
               })()}
             </div>
@@ -1190,36 +1192,36 @@ const AccountingSpendTable: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
         <table className="w-full text-[11px] border-collapse border border-gray-300">
           <thead>
             <tr className="bg-amber-50/60 border-b border-gray-300 text-amber-800">
-              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-center" style={{ minWidth: '50px' }}>Lần</th>
-              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '120px' }}>Ngày update</th>
-              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '130px' }}>Chi Sản xuất (đ)</th>
-              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '130px' }}>Chi Kinh doanh (đ)</th>
-              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '130px' }}>Tổng (đ)</th>
-              <th className="px-2 py-1.5 font-semibold text-left" style={{ minWidth: '140px' }}>Người import</th>
+              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-center" style={{ minWidth: '30px' }}>Lần</th>
+              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '85px' }}>Ngày update</th>
+              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '90px' }}>Chi SX (đ)</th>
+              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '90px' }}>Chi KD (đ)</th>
+              <th className="px-1.5 py-1.5 font-semibold text-right" style={{ minWidth: '95px' }}>Tổng (đ)</th>
             </tr>
           </thead>
           <tbody>
             {spends.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-gray-400 italic py-4 text-[11px]">Chưa có dữ liệu — Kế toán import hàng tháng ở tab "Chi thực tế (Kế toán)".</td></tr>
+              <tr><td colSpan={5} className="text-center text-gray-400 italic py-4 text-[11px]">Chưa có dữ liệu — Kế toán import hàng tháng ở tab "Chi thực tế (Kế toán)".</td></tr>
             )}
             {spends.map((s, i) => (
-              <tr key={s.id} className="border-b border-gray-200 hover:bg-amber-50/30">
+              <tr key={s.id} title={s.by ? `Người import: ${s.by}` : undefined} className="border-b border-gray-200 hover:bg-amber-50/30">
                 <Td center muted>{i + 1}</Td>
                 <Td mono>{s.at}</Td>
                 <Td right><span className="font-semibold text-amber-700">{fmtFull(s.production)}</span></Td>
                 <Td right><span className="font-semibold text-amber-700">{fmtFull(s.business)}</span></Td>
                 <Td right><b className="text-gray-800">{fmtFull(s.production + s.business)}</b></Td>
-                <Td muted>{s.by || '—'}</Td>
               </tr>
             ))}
             {spends.length > 0 && (
               <tr className="bg-amber-100/50 font-bold border-t-2 border-amber-300">
                 <Td center></Td>
-                <Td>Lũy kế đến hiện tại</Td>
+                <Td>
+                  Lũy kế
+                  <span className="block mt-0.5 text-[9px] font-bold">{overAll ? <span className="text-red-600">⚠ Vượt tổng NS</span> : (overSX || overKD) ? <span className="text-orange-600">⚠ Vượt NS {[overSX && 'SX', overKD && 'KD'].filter(Boolean).join(' & ')}</span> : <span className="text-green-700">✓ Trong NS</span>}</span>
+                </Td>
                 <Td right><span className={overSX ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiSX)}</span><span className={`block text-[9px] font-normal ${overSX ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsSX)} ({nsSX > 0 ? `${((chiSX / nsSX) * 100).toFixed(0)}%` : '—'})</span></Td>
                 <Td right><span className={overKD ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiKD)}</span><span className={`block text-[9px] font-normal ${overKD ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsKD)} ({nsKD > 0 ? `${((chiKD / nsKD) * 100).toFixed(0)}%` : '—'})</span></Td>
                 <Td right><span className={overAll ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiSX + chiKD)}</span><span className={`block text-[9px] font-normal ${overAll ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsSX + nsKD)} ({nsSX + nsKD > 0 ? `${(((chiSX + chiKD) / (nsSX + nsKD)) * 100).toFixed(0)}%` : '—'})</span></Td>
-                <Td>{overAll ? <span className="text-red-600">⚠ Vượt tổng NS</span> : (overSX || overKD) ? <span className="text-orange-600">⚠ Vượt NS {[overSX && 'SX', overKD && 'KD'].filter(Boolean).join(' & ')}</span> : <span className="text-green-700">✓ Trong NS</span>}</Td>
               </tr>
             )}
           </tbody>
