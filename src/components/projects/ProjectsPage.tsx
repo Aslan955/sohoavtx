@@ -913,15 +913,10 @@ const DetailView: React.FC<{
                 const snap = viewVersion !== null ? (pakd.versionSnaps || []).find(s => s.version === viewVersion) : null;
                 if (snap) return <SnapshotTable snap={snap.steps} versionLabel={`V${snap.version}`} by={snap.by} at={snap.at} />;
                 return (
-                  <div className="grid grid-cols-1 2xl:grid-cols-[1fr_400px] gap-4 items-start">
-                    <div className="min-w-0">
-                      <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
-                        canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
-                        onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
-                        onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
-                    </div>
-                    <AccountingSpendTable pakd={pakd} />
-                  </div>
+                  <PhaseTable pakd={pakd} editable={editable || adjustMode} currentPhase={currentPhase} canEditSpent={canEditSpent}
+                    canEditSpentTotal={canEditSpent && pakd.status !== 'COMPLETED'} onEditSpent={onEditSpent}
+                    onUpd={updStep} onUpdSpent={onUpdSpent} onShowHistory={(i) => setHistIdx(i)} phaseIdx={phaseIdx}
+                    onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
                 );
               })()}
             </div>
@@ -1174,59 +1169,6 @@ const AccountingSpendBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
           <span className="text-gray-500">Cập nhật: <b className="text-gray-700 font-mono">{spends[0].at}</b> <span className="text-gray-400">({spends.length} lần)</span></span>
         </>
       )}
-    </div>
-  );
-};
-// Bảng Kế toán thực chi — mỗi lần import (hàng tháng) là 1 dòng; dòng cuối = lũy kế đến hiện tại (không theo KH)
-const AccountingSpendTable: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
-  const spends = [...(pakd.accountingSpends || [])].sort((a, b) => (a.at || '').localeCompare(b.at || '')); // cũ → mới
-  const nsSX = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
-  const nsKD = pakd.steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
-  const chiSX = spends.reduce((s, x) => s + x.production, 0);
-  const chiKD = spends.reduce((s, x) => s + x.business, 0);
-  const overSX = chiSX > nsSX && nsSX > 0, overKD = chiKD > nsKD && nsKD > 0, overAll = chiSX + chiKD > nsSX + nsKD && nsSX + nsKD > 0;
-  return (
-    <div className="space-y-1.5">
-      <SectionTitle>Kế toán thực chi — theo lần import ({spends.length})</SectionTitle>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[11px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-amber-50/60 border-b border-gray-300 text-amber-800">
-              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-center" style={{ minWidth: '30px' }}>Lần</th>
-              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: '85px' }}>Ngày update</th>
-              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '90px' }}>Chi SX (đ)</th>
-              <th className="px-1.5 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: '90px' }}>Chi KD (đ)</th>
-              <th className="px-1.5 py-1.5 font-semibold text-right" style={{ minWidth: '95px' }}>Tổng (đ)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {spends.length === 0 && (
-              <tr><td colSpan={5} className="text-center text-gray-400 italic py-4 text-[11px]">Chưa có dữ liệu — Kế toán import hàng tháng ở tab "Chi thực tế (Kế toán)".</td></tr>
-            )}
-            {spends.map((s, i) => (
-              <tr key={s.id} title={s.by ? `Người import: ${s.by}` : undefined} className="border-b border-gray-200 hover:bg-amber-50/30">
-                <Td center muted>{i + 1}</Td>
-                <Td mono>{s.at}</Td>
-                <Td right><span className="font-semibold text-amber-700">{fmtFull(s.production)}</span></Td>
-                <Td right><span className="font-semibold text-amber-700">{fmtFull(s.business)}</span></Td>
-                <Td right><b className="text-gray-800">{fmtFull(s.production + s.business)}</b></Td>
-              </tr>
-            ))}
-            {spends.length > 0 && (
-              <tr className="bg-amber-100/50 font-bold border-t-2 border-amber-300">
-                <Td center></Td>
-                <Td>
-                  Lũy kế
-                  <span className="block mt-0.5 text-[9px] font-bold">{overAll ? <span className="text-red-600">⚠ Vượt tổng NS</span> : (overSX || overKD) ? <span className="text-orange-600">⚠ Vượt NS {[overSX && 'SX', overKD && 'KD'].filter(Boolean).join(' & ')}</span> : <span className="text-green-700">✓ Trong NS</span>}</span>
-                </Td>
-                <Td right><span className={overSX ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiSX)}</span><span className={`block text-[9px] font-normal ${overSX ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsSX)} ({nsSX > 0 ? `${((chiSX / nsSX) * 100).toFixed(0)}%` : '—'})</span></Td>
-                <Td right><span className={overKD ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiKD)}</span><span className={`block text-[9px] font-normal ${overKD ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsKD)} ({nsKD > 0 ? `${((chiKD / nsKD) * 100).toFixed(0)}%` : '—'})</span></Td>
-                <Td right><span className={overAll ? 'text-red-600' : 'text-amber-900'}>{fmtFull(chiSX + chiKD)}</span><span className={`block text-[9px] font-normal ${overAll ? 'text-red-500' : 'text-gray-500'}`}>/ NS {fmtFull(nsSX + nsKD)} ({nsSX + nsKD > 0 ? `${(((chiSX + chiKD) / (nsSX + nsKD)) * 100).toFixed(0)}%` : '—'})</span></Td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 };
@@ -2172,6 +2114,44 @@ const PhaseTable: React.FC<{
               <Td></Td>
               <Td></Td>
             </tr>
+
+            {/* ===== Kế toán thực chi — theo lần import (không theo KH); số tiền thẳng cột NS để so sánh ===== */}
+            {(() => {
+              const spends = [...(pakd.accountingSpends || [])].sort((a, b) => (a.at || '').localeCompare(b.at || ''));
+              const chiSX = spends.reduce((s, x) => s + x.production, 0);
+              const chiKD = spends.reduce((s, x) => s + x.business, 0);
+              const overSX = chiSX > totSX && totSX > 0, overKD = chiKD > totKD && totKD > 0, overAll = chiSX + chiKD > grand && grand > 0;
+              return (
+                <>
+                  <tr className="bg-amber-50/80 border-t-2 border-amber-300">
+                    <td colSpan={11} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">💼 Kế toán thực chi — theo lần import ({spends.length}) <span className="font-normal normal-case text-gray-500">• cấp dự án, không theo giai đoạn</span></td>
+                  </tr>
+                  {spends.length === 0 && (
+                    <tr className="bg-amber-50/30"><td colSpan={11} className="px-2 py-2 text-[11px] text-gray-400 italic text-center">Chưa có dữ liệu — Kế toán import hàng tháng ở tab "Chi thực tế (Kế toán)".</td></tr>
+                  )}
+                  {spends.map((s, i) => (
+                    <tr key={s.id} title={s.by ? `Người import: ${s.by}` : undefined} className="bg-amber-50/30 border-b border-amber-100">
+                      <td className="px-2 py-1.5 border-r border-gray-200 text-center text-gray-500">{i + 1}</td>
+                      <td colSpan={5} className="px-2 py-1.5 border-r border-gray-200 text-gray-600">Ngày update: <b className="font-mono text-gray-800">{s.at}</b>{s.by && <span className="text-gray-400"> • {s.by}</span>}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-200 text-right font-semibold text-amber-700">{fmtFull(s.production)}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-200 text-right font-semibold text-amber-700">{fmtFull(s.business)}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-200 text-right font-bold text-gray-800">{fmtFull(s.production + s.business)}</td>
+                      <td colSpan={2} className="px-2 py-1.5"></td>
+                    </tr>
+                  ))}
+                  {spends.length > 0 && (
+                    <tr className="bg-amber-100/60 font-bold border-t border-amber-300">
+                      <td className="px-2 py-1.5 border-r border-gray-200"></td>
+                      <td colSpan={5} className="px-2 py-1.5 border-r border-gray-200 text-amber-900">Lũy kế đến hiện tại</td>
+                      <td className={`px-2 py-1.5 border-r border-gray-200 text-right ${overSX ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiSX)}<span className={`block text-[9px] font-normal ${overSX ? 'text-red-500' : 'text-gray-500'}`}>{totSX > 0 ? `${((chiSX / totSX) * 100).toFixed(0)}% NS` : '—'}</span></td>
+                      <td className={`px-2 py-1.5 border-r border-gray-200 text-right ${overKD ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiKD)}<span className={`block text-[9px] font-normal ${overKD ? 'text-red-500' : 'text-gray-500'}`}>{totKD > 0 ? `${((chiKD / totKD) * 100).toFixed(0)}% NS` : '—'}</span></td>
+                      <td className={`px-2 py-1.5 border-r border-gray-200 text-right ${overAll ? 'text-red-600' : 'text-amber-900'}`}>{fmtFull(chiSX + chiKD)}<span className={`block text-[9px] font-normal ${overAll ? 'text-red-500' : 'text-gray-500'}`}>{grand > 0 ? `${(((chiSX + chiKD) / grand) * 100).toFixed(0)}% NS` : '—'}</span></td>
+                      <td colSpan={2} className="px-2 py-1.5 text-[10px]">{overAll ? <span className="text-red-600">⚠ Vượt tổng NS</span> : (overSX || overKD) ? <span className="text-orange-600">⚠ Vượt NS {[overSX && 'SX', overKD && 'KD'].filter(Boolean).join(' & ')}</span> : <span className="text-green-700">✓ Trong NS</span>}</td>
+                    </tr>
+                  )}
+                </>
+              );
+            })()}
           </tbody>
         </table>
       </div>
