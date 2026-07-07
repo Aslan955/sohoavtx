@@ -765,9 +765,9 @@ const DetailView: React.FC<{
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-white border border-blue-200 rounded px-3 py-2">
                 <CodeInline label="Mã tổng" value={pakd.masterCode} />
                 <span className="w-px h-8 bg-blue-100" />
-                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM} showPm />
+                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
                 <span className="w-px h-8 bg-blue-100" />
-                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM} showPm />
+                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
                 <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="ml-1 flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
                 <span className="w-px h-8 bg-blue-100" />
                 <div className="flex items-center gap-1.5">
@@ -1150,16 +1150,18 @@ const CodeBox: React.FC<{ label: string; value: string }> = ({ label, value }) =
 );
 // Modal cập nhật PM (quản trị dự án) cho 3 mã: tổng / kinh doanh / sản xuất
 const UpdatePMModal: React.FC<{ pakd: Pakd; onClose: () => void; onSave: (business: string, production: string) => void }> = ({ pakd, onClose, onSave }) => {
-  const [b, setB] = useState(pakd.businessPM || '');
-  const [p, setP] = useState(pakd.productionPM || '');
+  const hod = pakd.businessDirector || ''; // HOD = Giám đốc Khối, PM mặc định
+  const [b, setB] = useState(pakd.businessPM || hod);
+  const [p, setP] = useState(pakd.productionPM || hod);
   const inp = 'w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400';
   const Field: React.FC<{ label: string; code: string; value: string; onChange: (v: string) => void }> = ({ label, code, value, onChange }) => (
     <div className="space-y-1">
       <label className="text-[11px] font-semibold text-gray-600 flex items-center gap-1.5">{label} <span className="font-mono text-blue-600 font-bold">{code}</span></label>
       <select value={value} onChange={(e) => onChange(e.target.value)} className={inp}>
         <option value="">— Chọn PM phụ trách —</option>
+        {hod && <option value={hod}>{hod} · HOD (mặc định)</option>}
         {PROJECT_MANAGERS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
-        {value && !PROJECT_MANAGERS.includes(value) && <option value={value}>{value}</option>}
+        {value && value !== hod && !PROJECT_MANAGERS.includes(value) && <option value={value}>{value}</option>}
       </select>
     </div>
   );
@@ -1171,6 +1173,7 @@ const UpdatePMModal: React.FC<{ pakd: Pakd; onClose: () => void; onSave: (busine
           <h3 className="text-sm font-bold text-gray-800">Cập nhật PM (quản trị dự án) cho các mã</h3>
         </div>
         <div className="p-5 space-y-3">
+          <p className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded px-2.5 py-1.5">Mặc định PM là <b>HOD (Giám đốc Khối)</b>. HOD có thể phân giao lại cho PM cụ thể ở đây; việc phân quyền chi tiết xử lý sau.</p>
           <Field label="PM Mã kinh doanh" code={pakd.businessCode || ''} value={b} onChange={setB} />
           <Field label="PM Mã sản xuất" code={pakd.productionCode || ''} value={p} onChange={setP} />
         </div>
