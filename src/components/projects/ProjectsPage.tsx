@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell, Star, Wallet,
+  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
@@ -466,6 +466,8 @@ const DetailView: React.FC<{
   const [viewVersion, setViewVersion] = useState<number | null>(null); // xem lại 1 phiên bản đã chốt (read-only)
   const [keyConfirm, setKeyConfirm] = useState(false); // popup xác nhận đánh dấu dự án trọng điểm
   const toggleKeyProject = () => setPakd(p => ({ ...p, isKeyProject: !p.isKeyProject }));
+  const [pmOpen, setPmOpen] = useState(false); // popup cập nhật PM cho 3 mã
+  const updatePMs = (m: string, b: string, p: string) => setPakd(prev => ({ ...prev, masterPM: m, businessPM: b, productionPM: p }));
   // Ảnh chụp thông tin chung của dự án (để diff & khôi phục khi điều chỉnh)
   type InfoSnap = { customerCode: string; customerName: string; domain: string; pmName: string; projStart: string; projEnd: string; revenue: number; expectedCost: number };
   const infoSnap = (p: Pakd): InfoSnap => ({ customerCode: p.customerCode, customerName: p.customerName, domain: p.domain || '', pmName: p.pmName || '', projStart: p.projStart || '', projEnd: p.projEnd || '', revenue: p.revenue, expectedCost: p.expectedCost ?? 0 });
@@ -761,12 +763,13 @@ const DetailView: React.FC<{
           {pakd.masterCode ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-white border border-blue-200 rounded px-3 py-2">
-                <CodeInline label="Mã tổng" value={pakd.masterCode} />
-                <span className="w-px h-6 bg-blue-100" />
-                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} />
-                <span className="w-px h-6 bg-blue-100" />
-                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} />
-                <span className="w-px h-6 bg-blue-100" />
+                <CodeInline label="Mã tổng" value={pakd.masterCode} pm={pakd.masterPM} />
+                <span className="w-px h-8 bg-blue-100" />
+                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM} />
+                <span className="w-px h-8 bg-blue-100" />
+                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM} />
+                <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="ml-1 flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
+                <span className="w-px h-8 bg-blue-100" />
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length}):</span>
                   {pakd.outsourceCodes.length === 0 ? (
@@ -1034,6 +1037,9 @@ const DetailView: React.FC<{
         </div>
       )}
 
+      {/* Popup cập nhật PM cho 3 mã dự án */}
+      {pmOpen && <UpdatePMModal pakd={pakd} onClose={() => setPmOpen(false)} onSave={(m, b, p) => { updatePMs(m, b, p); setPmOpen(false); }} />}
+
       {/* Popup xác nhận đánh dấu dự án trọng điểm */}
       {keyConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setKeyConfirm(false)}>
@@ -1178,11 +1184,47 @@ const CodeBox: React.FC<{ label: string; value: string }> = ({ label, value }) =
     <p className="text-sm font-bold font-mono text-blue-700 tracking-wider">{value}</p>
   </div>
 );
-// Mã hiển thị inline (nhãn + giá trị trên cùng một dòng)
-const CodeInline: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <span className="flex items-center gap-1.5">
-    <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}:</span>
-    <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{value}</span>
+// Modal cập nhật PM (quản trị dự án) cho 3 mã: tổng / kinh doanh / sản xuất
+const UpdatePMModal: React.FC<{ pakd: Pakd; onClose: () => void; onSave: (master: string, business: string, production: string) => void }> = ({ pakd, onClose, onSave }) => {
+  const [m, setM] = useState(pakd.masterPM || '');
+  const [b, setB] = useState(pakd.businessPM || '');
+  const [p, setP] = useState(pakd.productionPM || '');
+  const inp = 'w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400';
+  const Field: React.FC<{ label: string; code: string; value: string; onChange: (v: string) => void }> = ({ label, code, value, onChange }) => (
+    <div className="space-y-1">
+      <label className="text-[11px] font-semibold text-gray-600 flex items-center gap-1.5">{label} <span className="font-mono text-blue-600 font-bold">{code}</span></label>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Tên PM phụ trách..." className={inp} />
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200">
+          <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><UserCheck size={16} /></span>
+          <h3 className="text-sm font-bold text-gray-800">Cập nhật PM (quản trị dự án) cho các mã</h3>
+        </div>
+        <div className="p-5 space-y-3">
+          <Field label="PM Mã tổng" code={pakd.masterCode || ''} value={m} onChange={setM} />
+          <Field label="PM Mã kinh doanh" code={pakd.businessCode || ''} value={b} onChange={setB} />
+          <Field label="PM Mã sản xuất" code={pakd.productionCode || ''} value={p} onChange={setP} />
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
+          <button onClick={onClose} className={Btn.ghost}>Hủy</button>
+          <button onClick={() => onSave(m.trim(), b.trim(), p.trim())} className={Btn.primary}><Check size={13} className="mr-1" />Lưu PM</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Mã hiển thị inline (nhãn + giá trị + PM phụ trách)
+const CodeInline: React.FC<{ label: string; value: string; pm?: string }> = ({ label, value, pm }) => (
+  <span className="flex flex-col gap-0.5">
+    <span className="flex items-center gap-1.5">
+      <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}:</span>
+      <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{value}</span>
+    </span>
+    <span className="text-[9px] text-gray-500 flex items-center gap-1"><UserCheck size={10} className="text-gray-400" />PM: {pm ? <b className="text-gray-700">{pm}</b> : <i className="text-gray-400">chưa gán</i>}</span>
   </span>
 );
 const SheetTab: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (

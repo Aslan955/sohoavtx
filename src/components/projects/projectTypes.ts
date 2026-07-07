@@ -175,6 +175,9 @@ export interface Pakd {
   versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   isKeyProject?: boolean; // dự án trọng điểm (đánh dấu để ưu tiên theo dõi)
+  masterPM?: string;      // PM (quản trị dự án) phụ trách mã tổng
+  businessPM?: string;    // PM phụ trách mã kinh doanh
+  productionPM?: string;  // PM phụ trách mã sản xuất
   accountingSpends?: AccountingSpend[]; // chi thực tế do Kế toán import hàng tháng (theo dự án)
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
