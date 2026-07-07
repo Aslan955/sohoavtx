@@ -1120,60 +1120,24 @@ const BudgetSummaryBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
   const totalBudget = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
   const t = (pakd.accountingSpends || []).reduce((a, s) => ({ prod: a.prod + s.production, biz: a.biz + s.business }), { prod: 0, biz: 0 });
   const totalSpent = t.prod + t.biz;
+  const remaining = totalBudget - totalSpent; // tiền còn lại = NS xin - KT đã chi
   const pct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
   const overTotal = totalSpent > totalBudget && totalBudget > 0;
   const sep = <span className="w-px h-4 bg-gray-200" />;
   return (
-    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border border-gray-200 bg-gray-50/70 rounded px-3 py-1.5">
-      <span className="text-gray-500">NS đã xin: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b></span>
+    <div className={`flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border rounded px-3 py-1.5 ${overTotal ? 'border-red-300 bg-red-50/50' : 'border-gray-200 bg-gray-50/70'}`}>
+      <span className="text-gray-500">Ngân sách đã xin: <b className="text-blue-700 text-xs">{fmtFull(totalBudget)}</b></span>
       {sep}
-      <span className="text-gray-500">Đã chi (KT): <b className={`text-xs ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</b> <span className={`font-semibold ${overTotal ? 'text-red-600' : 'text-gray-600'}`}>({totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'})</span></span>
+      <span className="text-gray-500">Kế toán thực chi: <b className={`text-xs ${overTotal ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(totalSpent)}</b> <span className={`font-semibold ${overTotal ? 'text-red-600' : 'text-gray-600'}`}>({totalBudget > 0 ? `${pct.toFixed(1)}%` : '—'})</span></span>
+      {sep}
+      <span className="text-gray-500">Tiền còn lại: <b className={`text-xs ${remaining < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmtFull(remaining)}</b></span>
       {sep}
       {totalSpent === 0 ? (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-semibold">Chưa có chi thực tế</span>
       ) : overTotal ? (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">⚠ Đã vượt tổng NS</span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">⚠ Vượt ngân sách {fmtFull(totalSpent - totalBudget)}</span>
       ) : (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold">✓ Trong ngân sách</span>
-      )}
-    </div>
-  );
-};
-// Thanh compact: chi thực tế do Kế toán import — so sánh với NS từng loại (SX/KD), cảnh báo vượt
-const AccountingSpendBar: React.FC<{ pakd: Pakd }> = ({ pakd }) => {
-  const spends = [...(pakd.accountingSpends || [])].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
-  const chiSX = spends.reduce((s, x) => s + x.production, 0);
-  const chiKD = spends.reduce((s, x) => s + x.business, 0);
-  const nsSX = pakd.steps.reduce((s, st) => s + (st.productionBudget || 0), 0);
-  const nsKD = pakd.steps.reduce((s, st) => s + (st.businessBudget || 0), 0);
-  const pctSX = nsSX > 0 ? (chiSX / nsSX) * 100 : 0;
-  const pctKD = nsKD > 0 ? (chiKD / nsKD) * 100 : 0;
-  const overSX = chiSX > nsSX && nsSX > 0;
-  const overKD = chiKD > nsKD && nsKD > 0;
-  const overTotal = chiSX + chiKD > nsSX + nsKD && nsSX + nsKD > 0;
-  const detail = spends.map(s => `${s.at}: SX ${fmtFull(s.production)} • KD ${fmtFull(s.business)}${s.by ? ` (${s.by})` : ''}`).join('\n');
-  const sep = <span className="w-px h-4 bg-amber-200" />;
-  return (
-    <div title={detail || undefined} className={`flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] border rounded px-3 py-1.5 ${overSX || overKD || overTotal ? 'border-red-300 bg-red-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
-      <span className="flex items-center gap-1 text-amber-800 font-semibold"><Wallet size={12} />Kế toán thực chi:</span>
-      {spends.length === 0 ? (
-        <span className="text-gray-400 italic">Chưa có — import ở tab "Chi thực tế (Kế toán)"</span>
-      ) : (
-        <>
-          <span className="text-gray-500">SX: <b className={`text-xs ${overSX ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(chiSX)}</b> <span className={`font-semibold ${overSX ? 'text-red-600' : 'text-gray-600'}`}>({nsSX > 0 ? `${pctSX.toFixed(0)}%` : '—'} NS)</span></span>
-          {sep}
-          <span className="text-gray-500">KD: <b className={`text-xs ${overKD ? 'text-red-600' : 'text-amber-700'}`}>{fmtFull(chiKD)}</b> <span className={`font-semibold ${overKD ? 'text-red-600' : 'text-gray-600'}`}>({nsKD > 0 ? `${pctKD.toFixed(0)}%` : '—'} NS)</span></span>
-          {sep}
-          {overTotal ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">⚠ Đã vượt tổng NS</span>
-          ) : (overSX || overKD) ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-bold">⚠ Vượt NS {[overSX && 'Sản xuất', overKD && 'Kinh doanh'].filter(Boolean).join(' & ')}</span>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold">✓ Trong ngân sách</span>
-          )}
-          {sep}
-          <span className="text-gray-500">Cập nhật: <b className="text-gray-700 font-mono">{spends[0].at}</b> <span className="text-gray-400">({spends.length} lần)</span></span>
-        </>
       )}
     </div>
   );
@@ -2066,7 +2030,6 @@ const PhaseTable: React.FC<{
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <BudgetSummaryBar pakd={pakd} />
-          <AccountingSpendBar pakd={pakd} />
           {editable && (
             <>
               <button onClick={() => setImportOpen(true)} className={Btn.ghost}><Upload size={13} className="mr-1" />Import thông tin</button>
