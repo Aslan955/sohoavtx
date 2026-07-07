@@ -9,7 +9,7 @@ import {
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
 } from './projectTypes';
 import {
-  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, makePhases, khCode,
+  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, makePhases, khCode,
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
@@ -1156,7 +1156,11 @@ const UpdatePMModal: React.FC<{ pakd: Pakd; onClose: () => void; onSave: (busine
   const Field: React.FC<{ label: string; code: string; value: string; onChange: (v: string) => void }> = ({ label, code, value, onChange }) => (
     <div className="space-y-1">
       <label className="text-[11px] font-semibold text-gray-600 flex items-center gap-1.5">{label} <span className="font-mono text-blue-600 font-bold">{code}</span></label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Tên PM phụ trách..." className={inp} />
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inp}>
+        <option value="">— Chọn PM phụ trách —</option>
+        {PROJECT_MANAGERS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+        {value && !PROJECT_MANAGERS.includes(value) && <option value={value}>{value}</option>}
+      </select>
     </div>
   );
   return (

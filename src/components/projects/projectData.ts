@@ -76,6 +76,15 @@ export const SALES_DIRECTORS = [
   'Bùi Khánh Linh (GĐ Kinh doanh Khối CQNN)',
 ];
 export const BIDDING_METHODS = ['Đấu thầu rộng rãi', 'Chào hàng cạnh tranh', 'Chỉ định thầu', 'Đấu thầu hạn chế'];
+// Danh mục PM (quản trị dự án) — chọn khi gán PM cho mã kinh doanh / sản xuất
+export const PROJECT_MANAGERS = [
+  'V00914 - Trần Minh Quang',
+  'V00623 - Hoàng Ngọc Sơn',
+  'V00701 - Nguyễn Văn Bình',
+  'V00832 - Phạm Đức Anh',
+  'V00945 - Lê Thị Thu Hà',
+  'V01002 - Đặng Quốc Việt',
+];
 export const FIELD_TYPES = ['Hàng hóa CNTT', 'Dịch vụ phi tư vấn', 'Dịch vụ tư vấn', 'Xây lắp hạ tầng CNTT', 'Hỗn hợp'];
 export const CONTRACT_TYPES = ['Trọn gói', 'Theo đơn giá điều chỉnh', 'Theo đơn giá cố định'];
 
