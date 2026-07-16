@@ -12,8 +12,10 @@ import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, makePhases, khCode,
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
+import { BusinessDirectorDashboard } from './BusinessDirectorDashboard';
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
 import { AccountingImportPage, accountingTotal } from './AccountingImportPage';
+import { BulkImportPage } from './BulkImportPage';
 import { AccountingSpend } from './projectTypes';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -21,10 +23,10 @@ import {
   openOutsourceCode, hasOpenChangeRequest, rid, generateCodes,
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent, editActualSpent, lockedSpentTotal,
-  canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage,
+  canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage, applyPlanImport,
 } from './projectWorkflow';
 
-type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'CUSTOMERS' | 'ACCOUNTING';
+type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'BLOCK_DASH' | 'CUSTOMERS' | 'ACCOUNTING' | 'IMPORT';
 
 const STATUS_DOT: Record<string, string> = {
   DRAFT: 'bg-gray-400', RETURNED: 'bg-red-500',
@@ -107,6 +109,24 @@ export const ProjectsPage: React.FC = () => {
   const login = (u: typeof SYSTEM_USERS[number]) => { localStorage.setItem('plm_user', u.id); setSimUser(u); };
   const logout = () => { localStorage.removeItem('plm_user'); setSimUser(null); };
 
+  // Tạo dự án mới NGAY trên màn thông tin (bỏ popup): tạo nháp rỗng rồi mở chi tiết để nhập trực tiếp.
+  const createDraftInline = () => {
+    if (!simUser) return;
+    const codes = generateCodes(''); // mã tổng mặc định 022.xxx — có nút "Sinh lại theo mã KH" khi còn nháp
+    const p: Pakd = {
+      id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: '', customerName: '', customerCode: '',
+      creator: simUser.fullName, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
+      businessDirector: '', salesDirector: '', domain: '', projStart: '', projEnd: '',
+      expectedContractValue: 0, expectedCost: 0, ...codes,
+      tender: { packageCode: '', investor: '', biddingMethod: '', fieldType: '', contractType: '', packagePrice: 0, bidSecurity: 0, closeDate: '' },
+      revenue: 0, steps: makePhases(), costVersions: 0, currentPhase: 1, productionTasks: [], outsourceCodes: [],
+      locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
+    };
+    setPakds(prev => [p, ...prev]);
+    setModuleTab('LIST');
+    setSelectedId(p.id);
+  };
+
   if (!simUser) return <LoginScreen onLogin={login} />;
 
   const pendingPakd = pakds.filter(p => PAKD_PENDING_ROLE[p.status] === simUser.role);
@@ -159,7 +179,7 @@ export const ProjectsPage: React.FC = () => {
             <button onClick={logout} title="Đăng xuất" className="ml-1 text-gray-400 hover:text-red-600 flex items-center gap-1"><LogOut size={13} /></button>
           </div>
           {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && !current && (
-            <button onClick={() => setCreateOpen(true)} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
+            <button onClick={createDraftInline} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
               <Plus size={16} className="mr-1" />Tạo dự án
             </button>
           )}
@@ -193,9 +213,11 @@ export const ProjectsPage: React.FC = () => {
           {/* Module tabs */}
           <div className="flex border-b border-gray-200 mb-4">
             {['BOD', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard BOD" count={countAlerts(pakds)} active={moduleTab === 'DASHBOARD'} onClick={() => setModuleTab('DASHBOARD')} />}
+            {['BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard GĐ Khối" active={moduleTab === 'BLOCK_DASH'} onClick={() => setModuleTab('BLOCK_DASH')} />}
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
             <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
             <ModTab label="Khách hàng" active={moduleTab === 'CUSTOMERS'} onClick={() => setModuleTab('CUSTOMERS')} />
+            {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role) && <ModTab label="Import PAKD" active={moduleTab === 'IMPORT'} onClick={() => setModuleTab('IMPORT')} />}
             <ModTab label="Chi thực tế (Kế toán)" active={moduleTab === 'ACCOUNTING'} onClick={() => setModuleTab('ACCOUNTING')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
             <ModTab label="Phiếu điều chỉnh CP" count={pendingCR.length} active={moduleTab === 'CHANGES'} onClick={() => setModuleTab('CHANGES')} />
@@ -203,10 +225,21 @@ export const ProjectsPage: React.FC = () => {
           </div>
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
+          {moduleTab === 'BLOCK_DASH' && <BusinessDirectorDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
           {moduleTab === 'CUSTOMERS' && <CustomersPage pakds={pakds} customers={customers} setCustomers={setCustomers} canEdit={['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role)} />}
           {moduleTab === 'ACCOUNTING' && <AccountingImportPage pakds={pakds} simUser={simUser} onImport={(items) => {
             setPakds(prev => prev.map(p => { const mine = items.filter(it => it.pakdId === p.id).map(it => it.spend); return mine.length ? { ...p, accountingSpends: [...(p.accountingSpends || []), ...mine] } : p; }));
           }} />}
+          {moduleTab === 'IMPORT' && <BulkImportPage customers={customers} pakds={pakds} simUser={simUser}
+            onImport={(newPakds, newCustomers) => {
+              setPakds(prev => [...newPakds, ...prev]);
+              if (newCustomers.length) setCustomers(prev => { const have = new Set(prev.map(c => c.code.toLowerCase())); return [...prev, ...newCustomers.filter(c => !have.has(c.code.toLowerCase()))]; });
+              setModuleTab('LIST');
+            }}
+            onImportPhases={(groups, reason) => {
+              groups.forEach(({ pakdId, patches }) => runAction(pakdId, (p, l) => applyPlanImport(p, patches, reason, simUser.fullName, simUser.role, l)));
+              setModuleTab('LIST');
+            }} />}
           {moduleTab === 'LIST' && (
             <ListView pakds={filtered} counts={counts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} onOpen={setSelectedId} phaseFilter={phaseFilter} setPhaseFilter={setPhaseFilter} maxPhases={maxPhases} keyOnly={keyOnly} setKeyOnly={setKeyOnly} />
           )}
@@ -226,9 +259,6 @@ export const ProjectsPage: React.FC = () => {
         </>
       )}
 
-      {createOpen && <CreateModal onClose={() => setCreateOpen(false)} creator={simUser.fullName} customers={customers}
-        onGotoCustomers={() => { setCreateOpen(false); setModuleTab('CUSTOMERS'); }}
-        onCreate={(p) => { setPakds([p, ...pakds]); setSelectedId(p.id); setCreateOpen(false); }} />}
     </div>
   );
 };
@@ -360,14 +390,6 @@ const ListView: React.FC<{
   keyOnly: boolean; setKeyOnly: (v: boolean) => void;
 }> = ({ pakds, counts, statusFilter, setStatusFilter, search, setSearch, onOpen, phaseFilter, setPhaseFilter, maxPhases, keyOnly, setKeyOnly }) => (
   <div>
-    {/* status filter tabs */}
-    <div className="flex border-b border-gray-200 mb-3 overflow-x-auto">
-      <FilterTab label="Tất cả" count={counts.ALL} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
-      {Object.keys(PAKD_STATUS_LABEL).filter(s => counts[s] > 0).map(s => (
-        <FilterTab key={s} label={PAKD_STATUS_LABEL[s as keyof typeof PAKD_STATUS_LABEL]} count={counts[s]} active={statusFilter === s} onClick={() => setStatusFilter(s)} />
-      ))}
-    </div>
-
     <div className="flex items-center justify-between mb-2 gap-2">
       <button className={Btn.ghost}><FileSpreadsheet size={14} className="mr-1.5" />Export XLSX</button>
       <div className="flex items-center gap-2">
@@ -459,7 +481,8 @@ const DetailView: React.FC<{
   const [decision, setDecision] = useState('');
   const [draftSaved, setDraftSaved] = useState(false); // xác nhận đã lưu nháp
   const [restartConfirm, setRestartConfirm] = useState(false); // popup xác nhận "làm lại từ đầu"
-  const [adjustMode, setAdjustMode] = useState(false); // đang điều chỉnh trực tiếp phương án (sau khi hoàn tất)
+  const [adjustMode, setAdjustMode] = useState(false); // đang sửa PHƯƠNG ÁN kinh doanh (cần duyệt lại)
+  const [infoEditMode, setInfoEditMode] = useState(false); // đang sửa KHỐI THÔNG TIN dự án (lưu trực tiếp, không duyệt)
   const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
   const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
   const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
@@ -469,9 +492,6 @@ const DetailView: React.FC<{
   const [pmOpen, setPmOpen] = useState(false); // popup cập nhật PM cho mã KD & SX
   const updatePMs = (b: string, p: string) => setPakd(prev => ({ ...prev, businessPM: b, productionPM: p }));
   // Ảnh chụp thông tin chung của dự án (để diff & khôi phục khi điều chỉnh)
-  type InfoSnap = { customerCode: string; customerName: string; domain: string; pmName: string; projStart: string; projEnd: string; revenue: number; expectedCost: number };
-  const infoSnap = (p: Pakd): InfoSnap => ({ customerCode: p.customerCode, customerName: p.customerName, domain: p.domain || '', pmName: p.pmName || '', projStart: p.projStart || '', projEnd: p.projEnd || '', revenue: p.revenue, expectedCost: p.expectedCost ?? 0 });
-  const [adjustInfoSnapshot, setAdjustInfoSnapshot] = useState<InfoSnap | null>(null);
   const updPakdInfo = (patch: Partial<Pakd>) => setPakd(p => ({ ...p, ...patch }));
   const isMyTurn = PAKD_PENDING_ROLE[pakd.status] === simUser.role && !pakd.editingRole;
   const editingNow = canEditPlanNow(pakd, simUser.role); // đang sửa khi PAKD đang duyệt
@@ -554,18 +574,25 @@ const DetailView: React.FC<{
   const rmTask = (sid: string, tid: string) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionTasks: (s.productionTasks || []).filter(t => t.id !== tid) } : s) }));
   const updProdInfo = (sid: string, patch: Partial<ProductionInfo>) => setPakd(p => ({ ...p, steps: p.steps.map(s => s.id === sid ? { ...s, productionInfo: { ...(s.productionInfo || {}), ...patch } } : s) }));
 
-  // ----- Điều chỉnh trực tiếp phương án sau khi hoàn tất — mỗi lần gửi duyệt là 1 phiên bản (Ver), ghi log cũ → mới -----
-  // Bấm "Tạo phiếu điều chỉnh" → mở popup nhập lý do; xác nhận mới vào chế độ sửa.
+  // ----- Điều chỉnh sau khi hoàn tất — TÁCH 2 KHỐI -----
+  // • Khối THÔNG TIN dự án (khách hàng, PM, domain, tiến độ, tài chính): sửa & lưu TRỰC TIẾP, không cần duyệt.
+  // • Khối KẾ HOẠCH / NGÂN SÁCH (các giai đoạn KH + P&L): bấm "Gửi duyệt" bên dưới → tạo phiên bản mới & trình duyệt lại.
+  // Bấm "Chỉnh sửa dự án" → vào chế độ sửa ngay (chỉ chụp ảnh phần kế hoạch để hoàn tác/so sánh).
+  const beginAdjust = () => {
+    setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps)));
+    setAdjustMode(true);
+    if (isReturnedAdjust) setAdjustReason(pakd.pendingAdjustReason || '');
+  };
+  // Xác nhận lý do trong popup = GỬI DUYỆT điều chỉnh kế hoạch/ngân sách.
   const confirmAdjustReason = () => {
     if (!adjustReason.trim()) return;
-    setAdjustSnapshot(JSON.parse(JSON.stringify(pakd.steps)));
-    setAdjustInfoSnapshot(infoSnap(pakd));
-    setAdjustMode(true); setReasonOpen(false);
+    saveAdjustment();
+    setReasonOpen(false);
   };
+  // Hủy chỉnh sửa: chỉ hoàn tác phần KẾ HOẠCH; thông tin dự án đã lưu trực tiếp nên giữ nguyên.
   const cancelAdjustment = () => {
     if (adjustSnapshot) setPakd(p => ({ ...p, steps: adjustSnapshot }));
-    if (adjustInfoSnapshot) setPakd(p => ({ ...p, customerCode: adjustInfoSnapshot.customerCode, customerName: adjustInfoSnapshot.customerName, domain: adjustInfoSnapshot.domain, pmName: adjustInfoSnapshot.pmName, projStart: adjustInfoSnapshot.projStart, projEnd: adjustInfoSnapshot.projEnd, revenue: adjustInfoSnapshot.revenue, expectedCost: adjustInfoSnapshot.expectedCost }));
-    setAdjustMode(false); setAdjustSnapshot(null); setAdjustInfoSnapshot(null); setAdjustReason('');
+    setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
   };
   const saveAdjustment = () => {
     const before = adjustSnapshot || [];
@@ -581,25 +608,7 @@ const DetailView: React.FC<{
     const logs: PlanChangeLog[] = [];
     const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
       ({ id: rid('LOG'), version: newVersion, at, by: simUser.fullName, role: simUser.role, reason: adjustReason.trim(), stepCode, field, before: bef, after: aft });
-    // Diff thông tin chung của dự án (mã KH, tên KH, domain, PM, tiến độ, doanh thu, chi phí dự kiến)
-    if (adjustInfoSnapshot) {
-      const cur = infoSnap(pakd);
-      const INFO_FIELDS: { key: keyof InfoSnap; label: string; money?: boolean }[] = [
-        { key: 'customerCode', label: 'Mã khách hàng' }, { key: 'customerName', label: 'Tên khách hàng' },
-        { key: 'domain', label: 'Domain' }, { key: 'pmName', label: 'PM (Người quản lý dự án)' },
-        { key: 'projStart', label: 'Thời gian bắt đầu' }, { key: 'projEnd', label: 'Thời gian kết thúc' },
-        { key: 'revenue', label: 'Doanh thu dự kiến tối thiểu', money: true }, { key: 'expectedCost', label: 'Chi phí dự kiến tối đa', money: true },
-      ];
-      for (const f of INFO_FIELDS) {
-        if (f.money) {
-          const bv = Number(adjustInfoSnapshot[f.key]) || 0; const av = Number(cur[f.key]) || 0;
-          if (bv !== av) logs.push(mk('Chung', f.label, fmtFull(bv), fmtFull(av)));
-        } else {
-          const bv = String(adjustInfoSnapshot[f.key] || ''); const av = String(cur[f.key] || '');
-          if (bv !== av) logs.push(mk('Chung', f.label, bv || '—', av || '—'));
-        }
-      }
-    }
+    // Chỉ diff phần KẾ HOẠCH (các giai đoạn KH + P&L). Thông tin dự án đã lưu trực tiếp, không đưa vào duyệt.
     const maxLen = Math.max(before.length, after.length);
     for (let i = 0; i < maxLen; i++) {
       const b = before[i]; const a = after[i]; const code = khCode(i);
@@ -645,7 +654,7 @@ const DetailView: React.FC<{
         approvalHistory: [submitRec, ...p.approvalHistory],
       }));
     }
-    setAdjustMode(false); setAdjustSnapshot(null); setAdjustInfoSnapshot(null); setAdjustReason('');
+    setAdjustMode(false); setAdjustSnapshot(null); setAdjustReason('');
   };
   // Điều chỉnh phương án: khi đã Hoàn tất, HOẶC khi phiếu điều chỉnh bị trả lại (RETURNED + đã khóa) để sửa & gửi duyệt lại.
   const isReturnedAdjust = pakd.status === 'RETURNED' && pakd.locked;
@@ -681,15 +690,19 @@ const DetailView: React.FC<{
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
           {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
-          {/* Điều chỉnh trực tiếp phương án sau khi hoàn tất (ghi log cũ → mới, không dùng version) */}
-          {canAdjustPlan && !adjustMode && (
-            <button onClick={() => { setAdjustReason(isReturnedAdjust ? (pakd.pendingAdjustReason || '') : ''); setReasonOpen(true); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />{isReturnedAdjust ? 'Sửa lại & gửi duyệt' : 'Tạo phiếu điều chỉnh'}</button>
+          {/* Sửa THÔNG TIN dự án (khối trên) — lưu trực tiếp, không cần duyệt */}
+          {canAdjustPlan && !adjustMode && !infoEditMode && (
+            <button onClick={() => setInfoEditMode(true)} className="flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700"><FileEdit size={14} className="mr-1.5" />Chỉnh sửa thông tin</button>
+          )}
+          {infoEditMode && (
+            <button onClick={() => setInfoEditMode(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong (đã lưu thông tin)</button>
+          )}
+          {/* Sửa PHƯƠNG ÁN kinh doanh — tạo phiên bản mới & trình duyệt lại */}
+          {canAdjustPlan && !adjustMode && !infoEditMode && (
+            <button onClick={beginAdjust} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />{isReturnedAdjust ? 'Sửa lại & gửi duyệt' : 'Sửa phương án'}</button>
           )}
           {adjustMode && (
-            <>
-              <button onClick={saveAdjustment} className={Btn.green}><Send size={14} className="mr-1.5" />Gửi duyệt</button>
-              <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Hủy</button>
-            </>
+            <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Thoát sửa phương án</button>
           )}
           <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
         </div>
@@ -704,13 +717,43 @@ const DetailView: React.FC<{
         </div>
       )}
 
-      {/* Lý do điều chỉnh đang chờ duyệt lại — hiển thị cho mọi cấp trong luồng */}
-      {pakd.pendingAdjustReason && !!PAKD_PENDING_ROLE[pakd.status] && (
-        <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
-          <FileEdit size={14} className="mt-0.5 shrink-0" />
-          <span>Phương án <b>vừa được điều chỉnh</b> và đang trình duyệt lại. <b>Lý do điều chỉnh:</b> <span className="text-orange-900 font-semibold">{pakd.pendingAdjustReason}</span> — xem chi tiết thay đổi ở mục <b>Lịch sử điều chỉnh phương án</b>.</span>
-        </div>
-      )}
+      {/* Lý do điều chỉnh + BẢNG SO SÁNH THAY ĐỔI (V mới vs V cũ) — hiển thị cho người duyệt */}
+      {pakd.pendingAdjustReason && !!PAKD_PENDING_ROLE[pakd.status] && (() => {
+        const diffLogs = (pakd.planChangeLogs || []).filter(l => l.version === pakd.version);
+        return (
+          <div className="border border-orange-300 bg-orange-50 rounded overflow-hidden">
+            <div className="p-3 text-xs text-orange-800 flex items-start gap-2">
+              <FileEdit size={14} className="mt-0.5 shrink-0" />
+              <span>Phương án <b>vừa được điều chỉnh</b> (V{pakd.version}) và đang trình duyệt lại. <b>Lý do:</b> <span className="text-orange-900 font-semibold">{pakd.pendingAdjustReason}</span></span>
+            </div>
+            {diffLogs.length > 0 && (
+              <div className="border-t border-orange-200 bg-white/70">
+                <div className="px-3 py-1.5 text-[11px] font-bold text-gray-700 flex items-center gap-1.5"><GitBranch size={12} className="text-orange-600" />So sánh thay đổi so với bản đã duyệt (V{pakd.version - 1} → V{pakd.version}) — {diffLogs.length} thay đổi</div>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-[11px] border-collapse">
+                    <thead className="bg-gray-50 sticky top-0"><tr className="text-gray-600">
+                      <th className="px-2 py-1.5 text-left border-b border-r border-gray-200" style={{ width: 70 }}>Giai đoạn</th>
+                      <th className="px-2 py-1.5 text-left border-b border-r border-gray-200">Nội dung</th>
+                      <th className="px-2 py-1.5 text-left border-b border-r border-gray-200">Bản cũ (V{pakd.version - 1})</th>
+                      <th className="px-2 py-1.5 text-left border-b border-gray-200">Bản mới (V{pakd.version})</th>
+                    </tr></thead>
+                    <tbody>
+                      {diffLogs.map(l => (
+                        <tr key={l.id} className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 border-r border-gray-100 font-mono text-gray-500">{l.stepCode}</td>
+                          <td className="px-2 py-1.5 border-r border-gray-100 text-gray-700">{l.field}</td>
+                          <td className="px-2 py-1.5 border-r border-gray-100 text-red-600 line-through/50"><span className="line-through">{l.before}</span></td>
+                          <td className="px-2 py-1.5 text-green-700 font-semibold">{l.after}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Thanh phê duyệt khi tới lượt vai trò hiện tại */}
       {isMyTurn && (
@@ -759,32 +802,39 @@ const DetailView: React.FC<{
 
         {/* Project codes (sinh sau khi GĐ Khối duyệt) */}
         <div className="px-4 py-3 border-b border-gray-200 bg-blue-50/40">
-          <SectionTitle>Mã dự án (sinh tự động khi tạo dự án)</SectionTitle>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <SectionTitle>Mã dự án (sinh tự động khi tạo dự án)</SectionTitle>
+            {pakd.masterCode && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
+                {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã theo mã KH</button>}
+              </div>
+            )}
+          </div>
           {pakd.masterCode ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-white border border-blue-200 rounded px-3 py-2">
-                <CodeInline label="Mã tổng" value={pakd.masterCode} />
-                <span className="w-px h-8 bg-blue-100" />
-                <CodeInline label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
-                <span className="w-px h-8 bg-blue-100" />
-                <CodeInline label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
-                <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="ml-1 flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
-                <span className="w-px h-8 bg-blue-100" />
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length}):</span>
-                  {pakd.outsourceCodes.length === 0 ? (
-                    <span className="text-[11px] text-gray-400 italic">Chưa có</span>
-                  ) : (
-                    <span className="flex flex-wrap items-center gap-y-0.5">
-                      {pakd.outsourceCodes.map((o, i) => (
-                        <React.Fragment key={o.id}>
-                          {i > 0 && <span className="mx-2 text-gray-300">—</span>}
-                          <span title={o.label} className="text-sm font-bold font-mono text-blue-700 tracking-wider">{o.code}</span>
-                        </React.Fragment>
-                      ))}
-                    </span>
-                  )}
-                </div>
+            <div className="space-y-2">
+              {/* 3 thẻ mã — lưới đều, thẳng hàng */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <CodeCard label="Mã tổng" value={pakd.masterCode} />
+                <CodeCard label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
+                <CodeCard label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
+              </div>
+
+              {/* Mã outsource — hàng riêng */}
+              <div className="bg-white border border-blue-200 rounded-md px-3 py-2 flex items-center gap-2 flex-wrap">
+                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length})</span>
+                {pakd.outsourceCodes.length === 0 ? (
+                  <span className="text-[11px] text-gray-400 italic">Chưa có</span>
+                ) : (
+                  <span className="flex flex-wrap items-center gap-y-0.5">
+                    {pakd.outsourceCodes.map((o, i) => (
+                      <React.Fragment key={o.id}>
+                        {i > 0 && <span className="mx-2 text-gray-300">—</span>}
+                        <span title={o.label} className="text-sm font-bold font-mono text-blue-700 tracking-wider">{o.code}</span>
+                      </React.Fragment>
+                    ))}
+                  </span>
+                )}
               </div>
 
               {/* Mở mã outsource: hiện ngay sau khi tạo dự án (đã có mã sản xuất) cho các vai trò tạo được dự án, kể cả còn nháp */}
@@ -804,9 +854,15 @@ const DetailView: React.FC<{
 
         {/* Thông tin cơ hội + tài chính */}
         {(() => {
-          const infoEditable = editable || adjustMode;
+          const infoEditable = editable || infoEditMode;
           const iInp = 'w-52 text-[11px] border border-gray-300 rounded px-2 py-1 text-right outline-none focus:border-blue-400';
           return (
+        <div>
+        {infoEditMode && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border-b border-green-200 text-[11px] text-green-800">
+            <Check size={13} className="shrink-0" /><span><b>Đang sửa khối thông tin dự án</b> — thay đổi được <b>lưu trực tiếp</b>, không cần trình duyệt. Xong bấm <b>"Xong (đã lưu thông tin)"</b>.</span>
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-b border-gray-200">
           <div className="p-4 border-r border-gray-200">
             <SectionTitle>Thông tin cơ hội kinh doanh</SectionTitle>
@@ -836,15 +892,16 @@ const DetailView: React.FC<{
             <SectionTitle>Tài chính</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
               {infoEditable ? (<>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Doanh thu dự kiến tối thiểu</dt><dd><NumberInput value={pakd.revenue} onChange={(v) => updPakdInfo({ revenue: v, expectedContractValue: v, tender: { ...pakd.tender, packagePrice: v } })} className={`${iInp} font-bold`} /></dd></div>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Chi phí dự kiến tối đa</dt><dd><NumberInput value={pakd.expectedCost ?? 0} onChange={(v) => updPakdInfo({ expectedCost: v })} className={`${iInp} text-red-600 font-semibold`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Doanh thu dự kiến</dt><dd><NumberInput value={pakd.revenue} onChange={(v) => updPakdInfo({ revenue: v, expectedContractValue: v, tender: { ...pakd.tender, packagePrice: v } })} className={`${iInp} font-bold`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Chi phí dự kiến</dt><dd><NumberInput value={pakd.expectedCost ?? 0} onChange={(v) => updPakdInfo({ expectedCost: v })} className={`${iInp} text-red-600 font-semibold`} /></dd></div>
               </>) : (<>
-                <DRow label="Doanh thu dự kiến tối thiểu" value={fmtFull(pakd.revenue)} strong />
-                <DRow label="Chi phí dự kiến tối đa" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
+                <DRow label="Doanh thu dự kiến" value={fmtFull(pakd.revenue)} strong />
+                <DRow label="Chi phí dự kiến" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
               </>)}
-              <DRow label="Lợi nhuận gộp dự kiến tối thiểu" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
+              <DRow label="Lợi nhuận gộp dự kiến" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
             </dl>
           </div>
+        </div>
         </div>
           );
         })()}
@@ -901,13 +958,12 @@ const DetailView: React.FC<{
                 );
               })()}
 
-              {/* Banner khi đang điều chỉnh trực tiếp phương án */}
+              {/* Banner khi đang chỉnh sửa — khối kế hoạch cần gửi duyệt */}
               {adjustMode && (
                 <div className="border border-orange-300 bg-orange-50 rounded p-3 text-xs text-orange-800 flex items-start gap-2">
                   <FileEdit size={14} className="mt-0.5 shrink-0" />
                   <div>
-                    <div>Bạn đang <b>điều chỉnh trực tiếp</b> phương án. Sửa xong bấm <b>"Gửi duyệt"</b> — phương án sẽ được trình duyệt lại từ đầu; mọi thay đổi (cũ → mới) được ghi vào <b>Lịch sử điều chỉnh phương án</b>.</div>
-                    <div className="mt-1">Lý do điều chỉnh: <b className="text-orange-900">{adjustReason}</b></div>
+                    <div>Đang <b>sửa phương án kinh doanh</b> — sửa xong bấm <b>"Gửi duyệt điều chỉnh"</b> bên dưới; hệ thống sinh <b>phiên bản mới (V{pakd.version + 1})</b> ở trạng thái chờ duyệt, phương án đã duyệt (V{pakd.version}) vẫn giữ nguyên. Người duyệt sẽ thấy bảng <b>so sánh thay đổi</b> so với bản cũ.</div>
                   </div>
                 </div>
               )}
@@ -922,6 +978,14 @@ const DetailView: React.FC<{
                     onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
                 );
               })()}
+
+              {/* Nút gửi duyệt riêng cho khối kế hoạch/ngân sách */}
+              {adjustMode && viewVersion === null && (
+                <div className="flex items-center justify-end gap-2 border-t border-orange-200 pt-3">
+                  <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Hủy chỉnh sửa kế hoạch</button>
+                  <button onClick={() => setReasonOpen(true)} className={Btn.green}><Send size={14} className="mr-1.5" />Gửi duyệt điều chỉnh kế hoạch & ngân sách</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1016,21 +1080,21 @@ const DetailView: React.FC<{
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setReasonOpen(false)}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200">
-              <span className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><FileEdit size={16} /></span>
-              <h3 className="text-sm font-bold text-gray-800">Tạo phiếu điều chỉnh</h3>
+              <span className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Send size={16} /></span>
+              <h3 className="text-sm font-bold text-gray-800">Gửi duyệt điều chỉnh kế hoạch & ngân sách</h3>
             </div>
             <div className="px-5 py-4 space-y-2">
               <label className="text-[12px] font-semibold text-gray-600">Lý do điều chỉnh <span className="text-red-500">*</span></label>
               <textarea value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} rows={3} autoFocus
-                placeholder="Nhập lý do vì sao cần điều chỉnh phương án..."
+                placeholder="Nhập lý do vì sao cần điều chỉnh kế hoạch/ngân sách..."
                 className="w-full text-[13px] border border-gray-300 rounded px-2.5 py-2 outline-none focus:border-orange-400 resize-y" />
-              <p className="text-[11px] text-gray-400">Lý do sẽ được lưu kèm mọi thay đổi (cũ → mới) trong Lịch sử điều chỉnh phương án.</p>
+              <p className="text-[11px] text-gray-400">Phương án sẽ tạo phiên bản mới và trình duyệt lại từ đầu. Lý do được lưu kèm mọi thay đổi (cũ → mới) trong Lịch sử điều chỉnh phương án.</p>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
               <button onClick={() => setReasonOpen(false)} className={Btn.ghost}>Hủy</button>
               <button onClick={confirmAdjustReason} disabled={!adjustReason.trim()}
-                className={`flex items-center px-3 py-1.5 text-white text-xs font-semibold rounded ${adjustReason.trim() ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-300 cursor-not-allowed'}`}>
-                <Check size={13} className="mr-1" />Bắt đầu điều chỉnh
+                className={`flex items-center px-3 py-1.5 text-white text-xs font-semibold rounded ${adjustReason.trim() ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'}`}>
+                <Send size={13} className="mr-1" />Gửi duyệt
               </button>
             </div>
           </div>
@@ -1195,6 +1259,18 @@ const CodeInline: React.FC<{ label: string; value: string; pm?: string; showPm?:
     </span>
     {showPm && <span className="text-[9px] text-gray-500 flex items-center gap-1"><UserCheck size={10} className="text-gray-400" />PM: {pm ? <b className="text-gray-700">{pm}</b> : <i className="text-gray-400">chưa gán</i>}</span>}
   </span>
+);
+// Thẻ mã dự án — bố cục lưới đều nhau, thẳng hàng
+const CodeCard: React.FC<{ label: string; value: string; pm?: string; showPm?: boolean }> = ({ label, value, pm, showPm }) => (
+  <div className="bg-white border border-blue-200 rounded-md px-3 py-2 flex flex-col">
+    <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
+    <span className="text-base font-bold font-mono text-blue-700 tracking-wider leading-tight mt-0.5">{value}</span>
+    {showPm && (
+      <span className="text-[9px] text-gray-500 flex items-center gap-1 mt-1.5 pt-1.5 border-t border-gray-100">
+        <UserCheck size={10} className="text-gray-400 shrink-0" />PM: {pm ? <b className="text-gray-700 truncate">{pm}</b> : <i className="text-gray-400">chưa gán</i>}
+      </span>
+    )}
+  </div>
 );
 const SheetTab: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
   <button onClick={onClick} className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${active ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
@@ -2004,6 +2080,7 @@ const ImportPhasesModal: React.FC<{ stepCount: number; onClose: () => void; onIm
   );
 };
 
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
@@ -2070,10 +2147,6 @@ const PhaseTable: React.FC<{
             {steps.map((s, i) => {
               const rowTotal = (s.productionBudget || 0) + (s.businessBudget || 0);
               const done = i + 1 < currentPhase; const isCur = i + 1 === currentPhase;
-              const isLast = i === lastIdx;
-              
-              const rowActual = s.actualSpent || 0;
-              const rowActualPct = rowTotal > 0 ? (rowActual / rowTotal) * 100 : 0;
 
               return (
                 <tr key={s.id} className={`border-b border-gray-200 ${isCur ? 'bg-blue-50/70' : phaseIdx === i ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
@@ -2460,9 +2533,9 @@ const CreateModal: React.FC<{ onClose: () => void; creator: string; customers: C
           <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
           <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><NumberInput value={f.expectedContractValue} onChange={(v) => setF({ ...f, expectedContractValue: v })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Chi phí dự kiến tối đa (VNĐ)</label><NumberInput value={f.expectedCost} onChange={(v) => setF({ ...f, expectedCost: v })} className={inp} /></div>
+          <div className="space-y-1"><label className={lab}>Chi phí dự kiến (VNĐ)</label><NumberInput value={f.expectedCost} onChange={(v) => setF({ ...f, expectedCost: v })} className={inp} /></div>
           <div className="col-span-2 space-y-1">
-            <label className={lab}>Lợi nhuận gộp dự kiến tối thiểu (%)</label>
+            <label className={lab}>Lợi nhuận gộp dự kiến (%)</label>
             {(() => { const p = f.expectedContractValue - f.expectedCost; const m = f.expectedContractValue > 0 ? (p / f.expectedContractValue) * 100 : 0; return (
               <div className={`w-full text-xs font-bold border rounded px-2.5 py-1.5 ${p >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
                 {p.toLocaleString('vi-VN')} đ ({m.toFixed(1)}%)

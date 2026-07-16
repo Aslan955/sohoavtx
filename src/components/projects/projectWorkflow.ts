@@ -2,6 +2,7 @@
 import {
   Pakd, PakdStatus, UserRole, ApprovalAction, ApprovalRecord, AuditLogEntry,
   ChangeRequest, ChangeRequestStatus, CostChange, ProjectStep, BudgetAdjustment, BudgetAdjStatus, pakdTotalCost,
+  PlanChangeLog, PlanVersionSnap, PlanStepSnap,
 } from './projectTypes';
 
 const nowStr = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -458,4 +459,106 @@ export function submitEditDuringApproval(pakd: Pakd, role: UserRole, actor: stri
   const updated: Pakd = { ...pakd, editingRole: undefined, editingSnapshot: undefined, status: resume, version: pakd.version + 1, planRevisions: [rev, ...(pakd.planRevisions || [])] };
   pushAudit(log, updated, actor, role, 'Sửa phương án & yêu cầu duyệt lại', PAKD_STATUS_LABEL[old], PAKD_STATUS_LABEL[resume], `Duyệt lại từ bước ${PAKD_STATUS_LABEL[resume]}.`);
   return { pakd: updated };
+}
+
+// ===================== Import ngân sách giai đoạn hàng loạt =====================
+// Cập nhật ngân sách/thông tin từng giai đoạn (KH01..) từ file import cho 1 PAKD.
+// - Nếu PAKD đang sửa được (Nháp / bị trả chưa khóa): áp trực tiếp, không đổi phiên bản.
+// - Nếu đã Hoàn tất / đang duyệt / đã khóa: đóng băng bản hiện tại thành V(n) đã chốt,
+//   tạo V(n+1) với số liệu mới, ghi log cũ→mới và NỘP DUYỆT LẠI TỪ ĐẦU (AM→GĐKD→GĐKhối→KT→BOD).
+const khc = (i: number) => `KH${String(i + 1).padStart(2, '0')}`;
+const money = (n: number) => (Number(n) || 0).toLocaleString('vi-VN') + ' đ';
+
+export interface PhaseImportPatch {
+  index: number; // 0-based: KH01 -> 0, KH02 -> 1, ...
+  name?: string; startDate?: string; endDate?: string; objective?: string; output?: string;
+  productionBudget?: number; businessBudget?: number;
+  contractBeforeVat?: number; // giá trị HĐ trước VAT của giai đoạn (dòng 1 bảng P&L)
+}
+
+export function applyPlanImport(
+  pakd: Pakd, patches: PhaseImportPatch[], reason: string, actor: string, role: UserRole, log: AuditLogEntry[],
+): { pakd: Pakd; error?: string; changes?: number } {
+  if (!patches.length) return { pakd, changes: 0 };
+  const editable = pakd.status === 'DRAFT' || (pakd.status === 'RETURNED' && !pakd.locked);
+  if (!editable && !reason.trim()) return { pakd, error: 'Cần nhập lý do điều chỉnh khi import cho PAKD đã hoàn tất / đang duyệt.' };
+
+  const before: ProjectStep[] = pakd.steps.map(s => ({ ...s }));
+  const steps: ProjectStep[] = pakd.steps.map(s => ({ ...s }));
+  const merge = (s: ProjectStep, p: PhaseImportPatch): ProjectStep => ({
+    ...s,
+    name: p.name !== undefined ? p.name : s.name,
+    startDate: p.startDate !== undefined ? p.startDate : s.startDate,
+    endDate: p.endDate !== undefined ? p.endDate : s.endDate,
+    objective: p.objective !== undefined ? p.objective : s.objective,
+    output: p.output !== undefined ? p.output : s.output,
+    productionBudget: p.productionBudget !== undefined ? p.productionBudget : s.productionBudget,
+    businessBudget: p.businessBudget !== undefined ? p.businessBudget : s.businessBudget,
+  });
+  for (const p of patches) {
+    if (p.index < 0) continue;
+    while (steps.length <= p.index) {
+      const k = steps.length;
+      steps.push({ id: khc(k), order: k + 1, name: `Giai đoạn ${k + 1}`, assignee: '', approvedBudget: 0, revenue: 0, costItems: [] });
+    }
+    steps[p.index] = merge(steps[p.index], p);
+  }
+
+  // Áp trực tiếp cho PAKD đang sửa được.
+  if (editable) {
+    const updated: Pakd = { ...pakd, steps };
+    pushAudit(log, updated, actor, role, 'Import ngân sách giai đoạn', PAKD_STATUS_LABEL[pakd.status], PAKD_STATUS_LABEL[pakd.status], `Cập nhật ${patches.length} giai đoạn từ file import.`);
+    return { pakd: updated, changes: patches.length };
+  }
+
+  // PAKD đã chốt/đang duyệt → điều chỉnh có phiên bản + nộp duyệt lại.
+  const newVersion = (pakd.version || 1) + 1;
+  const at = nowStr();
+  const logs: PlanChangeLog[] = [];
+  const mk = (stepCode: string, field: string, bef: string, aft: string): PlanChangeLog =>
+    ({ id: rid('LOG'), version: newVersion, at, by: actor, role, reason: reason.trim(), stepCode, field, before: bef, after: aft });
+  const FIELDS: { key: keyof ProjectStep; label: string; money?: boolean }[] = [
+    { key: 'name', label: 'Tên giai đoạn' }, { key: 'startDate', label: 'Ngày bắt đầu' }, { key: 'endDate', label: 'Ngày kết thúc' },
+    { key: 'objective', label: 'Mục tiêu' }, { key: 'output', label: 'Kết quả đầu ra' },
+    { key: 'businessBudget', label: 'NS Kinh doanh', money: true }, { key: 'productionBudget', label: 'NS Sản xuất', money: true },
+  ];
+  const maxLen = Math.max(before.length, steps.length);
+  for (let i = 0; i < maxLen; i++) {
+    const b = before[i]; const a = steps[i]; const code = khc(i);
+    if (!b && a) { logs.push(mk(code, 'Giai đoạn', '—', `Thêm mới: ${code} — ${a.name}`)); continue; }
+    if (!a) continue;
+    for (const f of FIELDS) {
+      if (f.money) {
+        const bv = Number(b[f.key]) || 0; const av = Number(a[f.key]) || 0;
+        if (bv !== av) logs.push(mk(code, f.label, money(bv), money(av)));
+      } else {
+        const bv = (b[f.key] as string) || ''; const av = (a[f.key] as string) || '';
+        if (bv !== av) logs.push(mk(code, f.label, bv || '—', av || '—'));
+      }
+    }
+  }
+  if (logs.length === 0) return { pakd, changes: 0 }; // không có thay đổi thực → bỏ qua
+
+  const reStage = firstPendingStage(pakd);
+  const submitRec: ApprovalRecord = {
+    id: rid('AR'), stepLabel: `Điều chỉnh phương án V${newVersion} (import) — nộp duyệt lại`, role, actor, action: 'SUBMIT',
+    comment: `Import điều chỉnh ngân sách giai đoạn V${newVersion} (${logs.length} thay đổi). Lý do: ${reason.trim()}`,
+    oldStatus: pakd.status, newStatus: reStage, createdAt: at,
+  };
+  const frozen: PlanVersionSnap = {
+    version: pakd.version || 1, at, by: actor, reason: reason.trim(),
+    steps: before.map((s, i): PlanStepSnap => ({
+      code: khc(i), name: s.name, start: s.startDate, end: s.endDate,
+      objective: s.objective, output: s.output, biz: s.businessBudget || 0, prod: s.productionBudget || 0, revenue: s.revenue || 0,
+    })),
+  };
+  const updated: Pakd = {
+    ...pakd, steps, version: newVersion, status: reStage, locked: false,
+    planChangeLogs: [...logs, ...(pakd.planChangeLogs || [])],
+    versionSnaps: [...(pakd.versionSnaps || []), frozen],
+    pendingAdjustReason: reason.trim(),
+    approvalHistory: [submitRec, ...pakd.approvalHistory],
+  };
+  pushAudit(log, updated, actor, role, 'Import điều chỉnh phương án — nộp duyệt lại', PAKD_STATUS_LABEL[pakd.status], PAKD_STATUS_LABEL[reStage], `V${newVersion} • ${logs.length} thay đổi • Lý do: ${reason.trim()}`);
+  return { pakd: updated, changes: logs.length };
 }

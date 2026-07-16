@@ -1,4 +1,4 @@
-import { Pakd, ProjectStep, SystemUser } from './projectTypes';
+import { Pakd, ProjectStep, SystemUser, CostLine } from './projectTypes';
 
 // 6 phương án chi phí chuẩn KH01..KH06
 export const PHASE_DEFAULT_NAMES = [
@@ -10,6 +10,29 @@ export const PHASE_DEFAULT_NAMES = [
   'Đóng dự án, Kiểm toán',
 ];
 
+// Bảng phân bổ chi phí P&L mặc định theo biểu mẫu BM_PAKD (norm %) — mỗi giai đoạn 1 bảng.
+let clSeq = 0;
+const cl = (label: string, category: CostLine['category'], basis: CostLine['basis'], percent: number, note?: string, fixed?: boolean): CostLine =>
+  ({ id: `CL-${++clSeq}-${Math.random().toString(36).slice(2, 6)}`, label, category, basis, percent, note, fixed });
+
+export function makeDefaultCostLines(): CostLine[] {
+  return [
+    cl('R&D', 'RND', 'PCT_CONTRACT', 10, '% trên giá trị HĐ', true),
+    cl('Chi phí phát triển', 'SX', 'PCT_NET', 40, 'Norm.'),
+    cl('Chi phí dự phòng', 'SX', 'PCT_NET', 8),
+    cl('Chi phí thưởng sản xuất', 'SX', 'PCT_NET', 0),
+    cl('Chi phí bảo hành', 'SX', 'PCT_NET', 10, 'Norm.'),
+    cl('Chi phí lương kinh doanh', 'KD', 'PCT_NET', 4.8, 'Có thể nhập số tuyệt đối'),
+    cl('Chi phí đối ngoại', 'KD', 'PCT_NET', 1),
+    cl('Công tác phí', 'KD', 'PCT_NET', 0.5),
+    cl('Chi phí dự phòng', 'KD', 'PCT_NET', 2),
+    cl('Chi phí thưởng kinh doanh', 'KD', 'PCT_NET', 0),
+    cl('Chi phí dự phòng kiểm toán', 'AUDIT', 'PCT_NET', 4.7, '% trên giá trị net', true),
+    cl('Chi phí tài chính', 'FINANCE', 'PCT_NET', 5, '% trên giá trị net', true),
+    cl('Chi phí chung vận hành, quản lý', 'OVERHEAD', 'PCT_NET', 5.9, '% trên giá trị net', true),
+  ];
+}
+
 export function makePhases(): ProjectStep[] {
   return PHASE_DEFAULT_NAMES.map((name, i) => ({
     id: `KH0${i + 1}`, order: i + 1, name, assignee: '', approvedBudget: 0, revenue: 0, costItems: [],
@@ -18,6 +41,18 @@ export function makePhases(): ProjectStep[] {
 
 // Mã giai đoạn: KH01, KH02, ... KH10...
 export const khCode = (i: number) => `KH${String(i + 1).padStart(2, '0')}`;
+
+// Di trú chi phí cũ → bảng P&L: ngân sách SX/KD đã nhập trước đây trở thành dòng INPUT tương ứng.
+function migrateCostLines(s: ProjectStep): ProjectStep {
+  if (s.costLines && s.costLines.length) return s;
+  const lines = makeDefaultCostLines().map(l => (l.category === 'SX' || l.category === 'KD') ? { ...l, percent: 0 } : l);
+  if ((s.productionBudget || 0) > 0) lines.push(cl('Ngân sách sản xuất (chuyển đổi)', 'SX', 'INPUT', 0), );
+  if ((s.businessBudget || 0) > 0) lines.push(cl('Ngân sách kinh doanh (chuyển đổi)', 'KD', 'INPUT', 0));
+  // gán amount cho 2 dòng chuyển đổi (cl không nhận amount)
+  const out = lines.map(l => l.label === 'Ngân sách sản xuất (chuyển đổi)' ? { ...l, amount: s.productionBudget || 0 }
+    : l.label === 'Ngân sách kinh doanh (chuyển đổi)' ? { ...l, amount: s.businessBudget || 0 } : l);
+  return { ...s, contractBeforeVat: s.contractBeforeVat || 0, costLines: out };
+}
 
 // Chuẩn hóa: đảm bảo mỗi PAKD có tối thiểu 6 phase KH01..KH06 (giữ phase thêm & tên tự định nghĩa)
 export function normalizePhases(p: Pakd): Pakd {

@@ -23,6 +23,47 @@ export type PakdStatus =
   | 'COMPLETED'
   | 'RETURNED'; // bị trả lại để Sale chỉnh & nộp lại
 
+// ----- Bảng phân bổ chi phí P&L theo giai đoạn (thay cách nhập cost item tự do) -----
+export type CostLineCategory = 'RND' | 'SX' | 'KD' | 'AUDIT' | 'FINANCE' | 'OVERHEAD';
+export type CostLineBasis = 'INPUT' | 'PCT_CONTRACT' | 'PCT_NET'; // nhập tay | % giá trị HĐ | % giá trị net
+
+export interface CostLine {
+  id: string;
+  label: string;
+  category: CostLineCategory;
+  basis: CostLineBasis;
+  percent?: number; // % khi basis là PCT_*
+  amount?: number;  // số tiền khi basis là INPUT
+  note?: string;    // hướng dẫn / ghi chú
+  fixed?: boolean;  // dòng chuẩn của biểu mẫu — không cho xóa
+}
+
+// Giá trị 1 dòng theo cơ sở tính
+export const costLineAmount = (l: CostLine, contract: number, net: number): number =>
+  l.basis === 'INPUT' ? (l.amount || 0)
+    : l.basis === 'PCT_CONTRACT' ? ((l.percent || 0) / 100) * contract
+      : ((l.percent || 0) / 100) * net;
+
+export interface CostPlanSummary {
+  contract: number; rnd: number; net: number;
+  sx: number; kd: number; audit: number; finance: number; overhead: number;
+  totalCost: number; profit: number; margin: number; // margin = LN / HĐ
+}
+
+// Tổng hợp P&L của 1 giai đoạn từ contractBeforeVat + costLines
+export const costPlanOf = (step: { contractBeforeVat?: number; costLines?: CostLine[] }): CostPlanSummary => {
+  const contract = step.contractBeforeVat || 0;
+  const lines = step.costLines || [];
+  const rndLine = lines.find(l => l.category === 'RND');
+  const rnd = rndLine ? costLineAmount(rndLine, contract, 0) : 0;
+  const net = contract - rnd;
+  const sum = (cat: CostLineCategory) => lines.filter(l => l.category === cat).reduce((s, l) => s + costLineAmount(l, contract, net), 0);
+  const sx = sum('SX'), kd = sum('KD'), audit = sum('AUDIT'), finance = sum('FINANCE'), overhead = sum('OVERHEAD');
+  const totalCost = sx + kd + audit + finance + overhead;
+  const profit = net - totalCost;
+  return { contract, rnd, net, sx, kd, audit, finance, overhead, totalCost, profit, margin: contract > 0 ? (profit / contract) * 100 : 0 };
+};
+
 // Một khoản chi phí thuộc 1 bước.
 export interface CostItem {
   id: string;
@@ -57,8 +98,10 @@ export interface ProjectStep {
   actualSpent?: number;
   // amount = khoản chi của lần đó; edited = dòng điều chỉnh sửa lại tổng (có thể âm); locked = đã qua duyệt, không sửa được nữa
   spentLog?: { at: string; by: string; role: UserRole; amount: number; edited?: boolean; locked?: boolean }[];
-  businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh
-  productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất
+  businessBudget?: number; // I. Phân bổ ngân sách cho Kinh doanh (đồng bộ = tổng nhóm KD của costLines)
+  productionBudget?: number; // II. Phân bổ ngân sách cho Sản xuất (đồng bộ = tổng nhóm SX của costLines)
+  contractBeforeVat?: number; // Giá trị ký hợp đồng trước VAT của giai đoạn (dòng 1 bảng P&L)
+  costLines?: CostLine[]; // bảng phân bổ chi phí P&L (R&D, CP SX, CP KD, kiểm toán, tài chính, vận hành)
   costItems: CostItem[]; // các khoản chi phí Kinh doanh
   productionCostItems?: CostItem[]; // các khoản chi phí Sản xuất
   productionInfo?: ProductionInfo; // thông tin dự án sản xuất của giai đoạn (GĐ Khối nhập)
