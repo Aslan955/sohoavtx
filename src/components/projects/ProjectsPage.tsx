@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck, AlertTriangle,
+  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck, AlertTriangle, MoreHorizontal,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
@@ -483,6 +483,8 @@ const DetailView: React.FC<{
   const [restartConfirm, setRestartConfirm] = useState(false); // popup xác nhận "làm lại từ đầu"
   const [adjustMode, setAdjustMode] = useState(false); // đang sửa PHƯƠNG ÁN kinh doanh (cần duyệt lại)
   const [infoEditMode, setInfoEditMode] = useState(false); // đang sửa KHỐI THÔNG TIN dự án (lưu trực tiếp, không duyệt)
+  const [moreOpen, setMoreOpen] = useState(false);         // menu "..." các thao tác phụ
+  const [detailTab, setDetailTab] = useState<'OVERVIEW' | 'HISTORY'>('OVERVIEW'); // tab dưới cùng
   const [adjustSnapshot, setAdjustSnapshot] = useState<ProjectStep[] | null>(null); // ảnh chụp trước khi điều chỉnh (để so sánh & khôi phục)
   const [adjustReason, setAdjustReason] = useState(''); // lý do điều chỉnh (bắt buộc)
   const [reasonOpen, setReasonOpen] = useState(false); // popup nhập lý do trước khi điều chỉnh
@@ -683,28 +685,36 @@ const DetailView: React.FC<{
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className={Btn.ghost}><ArrowLeft size={14} className="mr-1.5" />Quay lại danh sách</button>
+        <button onClick={onBack} className="flex items-center px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded shadow-sm hover:bg-gray-50"><ArrowLeft size={15} className="mr-1.5" />Quay lại</button>
         <div className="flex items-center gap-2">
           {draftSaved && <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600"><Check size={13} />Đã lưu nháp</span>}
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={() => { setDraftSaved(true); window.setTimeout(() => setDraftSaved(false), 2500); }} className={Btn.green}><FileEdit size={14} className="mr-1.5" />Lưu nháp</button>}
           {editable && (pakd.status === 'DRAFT' || pakd.status === 'RETURNED') && <button onClick={onSubmit} className={Btn.primary}>Nộp trình duyệt <ChevronRight size={14} className="ml-1" /></button>}
-          {canStartEdit && <button onClick={onStartEdit} className="flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700"><FileEdit size={14} className="mr-1.5" />Sửa phương án</button>}
           {editingNow && <button onClick={onSubmitEdit} className={Btn.green}><Check size={14} className="mr-1.5" />Yêu cầu duyệt lại (từ bước của tôi)</button>}
-          {/* Sửa THÔNG TIN dự án (khối trên) — lưu trực tiếp, không cần duyệt */}
+          {/* Hành động chính: Sửa phương án (Adjust plan) */}
           {canAdjustPlan && !adjustMode && !infoEditMode && (
-            <button onClick={() => setInfoEditMode(true)} className="flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700"><FileEdit size={14} className="mr-1.5" />Chỉnh sửa thông tin</button>
+            <button onClick={beginAdjust} className="flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded shadow-sm hover:bg-orange-700"><FileEdit size={15} className="mr-1.5" />{isReturnedAdjust ? 'Sửa lại & gửi duyệt' : 'Sửa phương án'}</button>
           )}
-          {infoEditMode && (
-            <button onClick={() => setInfoEditMode(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong (đã lưu thông tin)</button>
-          )}
-          {/* Sửa PHƯƠNG ÁN kinh doanh — tạo phiên bản mới & trình duyệt lại */}
-          {canAdjustPlan && !adjustMode && !infoEditMode && (
-            <button onClick={beginAdjust} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={14} className="mr-1.5" />{isReturnedAdjust ? 'Sửa lại & gửi duyệt' : 'Sửa phương án'}</button>
-          )}
-          {adjustMode && (
-            <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Thoát sửa phương án</button>
-          )}
-          <button onClick={() => setShowComments(v => !v)} className={showComments ? Btn.primary : Btn.ghost}><MessageSquare size={14} className="mr-1.5" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
+          {adjustMode && <button onClick={cancelAdjustment} className={Btn.ghost}><X size={14} className="mr-1.5" />Thoát sửa phương án</button>}
+          {infoEditMode && <button onClick={() => setInfoEditMode(false)} className={Btn.green}><Check size={14} className="mr-1.5" />Xong (đã lưu thông tin)</button>}
+          {/* Menu ... chứa các hành động phụ */}
+          <div className="relative">
+            <button onClick={() => setMoreOpen(v => !v)} title="Thao tác khác" className="flex items-center px-2.5 py-2 bg-white border border-gray-300 text-gray-600 rounded shadow-sm hover:bg-gray-50"><MoreHorizontal size={16} /></button>
+            {moreOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <div className="absolute right-0 mt-1 w-60 bg-white border border-gray-200 rounded shadow-lg z-50 py-1 text-xs">
+                  {canAdjustPlan && !adjustMode && !infoEditMode && (
+                    <button onClick={() => { setInfoEditMode(true); setMoreOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700"><FileEdit size={13} className="text-blue-600" />Chỉnh sửa thông tin dự án</button>
+                  )}
+                  <button onClick={() => { setShowComments(v => !v); setMoreOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700"><MessageSquare size={13} className="text-gray-500" />{showComments ? 'Ẩn ghi chú' : `Ghi chú (${(pakd.comments || []).length})`}</button>
+                  <button onClick={() => { pakd.isKeyProject ? toggleKeyProject() : setKeyConfirm(true); setMoreOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
+                    <Star size={13} className={pakd.isKeyProject ? 'fill-amber-500 text-amber-500' : 'text-gray-500'} />{pakd.isKeyProject ? 'Bỏ đánh dấu trọng điểm' : 'Đánh dấu dự án trọng điểm'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -774,23 +784,18 @@ const DetailView: React.FC<{
       <div className={`grid grid-cols-1 gap-4 items-start ${showComments ? 'lg:grid-cols-[1fr_330px]' : ''}`}>
       <div className="space-y-4 min-w-0">
       {/* Title bar */}
-      <div className="border border-gray-200 rounded">
-        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <div className={`border border-gray-200 rounded ${detailTab === 'OVERVIEW' ? '' : 'hidden'}`}>
+        <div className="bg-white border-b border-gray-200 px-5 py-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              {pakd.name}
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              {pakd.name || <span className="text-gray-400 italic font-normal">(chưa đặt tên dự án)</span>}
               {pakd.isKeyProject && <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5"><Star size={11} className="fill-amber-500 text-amber-500" />TRỌNG ĐIỂM</span>}
             </h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">Mã PAKD <b className="text-blue-600">{pakd.id}</b> • Phiên bản v{pakd.version} • Người lập: {pakd.creator}</p>
-            <button onClick={() => pakd.isKeyProject ? toggleKeyProject() : setKeyConfirm(true)}
-              className={`mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold border rounded px-2 py-1 transition-colors ${pakd.isKeyProject ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-gray-300 text-gray-500 hover:border-amber-400 hover:text-amber-600'}`}>
-              <Star size={13} className={pakd.isKeyProject ? 'fill-amber-500 text-amber-500' : ''} />
-              {pakd.isKeyProject ? 'Đã đánh dấu trọng điểm — bỏ đánh dấu' : 'Đánh dấu dự án trọng điểm'}
-            </button>
+            <p className="text-[12px] text-gray-500 mt-1">Phiên bản <b className="text-gray-800">v{pakd.version}</b> · Mã PAKD <b className="text-blue-600">{pakd.id}</b> · Người lập: {pakd.creator}</p>
           </div>
-          <div className="flex flex-col items-end gap-1 text-[11px]">
+          <div className="flex flex-col items-end gap-1 text-[12px] shrink-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-gray-500">Trạng thái đơn:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <PakdStatusCell status={pakd.status} />
             </div>
             <div className="flex items-center gap-1.5">
@@ -800,24 +805,31 @@ const DetailView: React.FC<{
           </div>
         </div>
 
-        {/* Project codes (sinh sau khi GĐ Khối duyệt) */}
-        <div className="px-4 py-3 border-b border-gray-200 bg-blue-50/40">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <SectionTitle>Mã dự án (sinh tự động khi tạo dự án)</SectionTitle>
-            {pakd.masterCode && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
-                {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã theo mã KH</button>}
-              </div>
-            )}
-          </div>
+        {/* Project codes — mã tổng ô riêng bên trái, mã KD/SX xếp dọc bên phải */}
+        <div className="px-5 py-4 border-b border-gray-200">
           {pakd.masterCode ? (
             <div className="space-y-2">
-              {/* 3 thẻ mã — lưới đều, thẳng hàng */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <CodeCard label="Mã tổng" value={pakd.masterCode} />
-                <CodeCard label="Mã kinh doanh" value={pakd.businessCode!} pm={pakd.businessPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
-                <CodeCard label="Mã sản xuất" value={pakd.productionCode!} pm={pakd.productionPM || (pakd.businessDirector ? `${pakd.businessDirector} · HOD (mặc định)` : undefined)} showPm />
+              <div className="border border-gray-200 rounded-lg bg-white flex flex-col sm:flex-row items-stretch">
+                <div className="px-5 py-3 border-b sm:border-b-0 sm:border-r border-gray-200 flex flex-col justify-center shrink-0">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã tổng</span>
+                  <span className="text-xl font-bold font-mono text-blue-700 tracking-wider leading-tight mt-0.5">{pakd.masterCode}</span>
+                </div>
+                <div className="px-5 py-3 flex-1 flex flex-col justify-center gap-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã kinh doanh</span>
+                    <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{pakd.businessCode}</span>
+                    <span className="text-[11px] text-gray-500">(PM: {pakd.businessPM || pakd.businessDirector || <i className="text-gray-400">chưa gán</i>})</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã sản xuất</span>
+                    <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{pakd.productionCode}</span>
+                    <span className="text-[11px] text-gray-500">(PM: {pakd.productionPM || pakd.businessDirector || <i className="text-gray-400">chưa gán</i>})</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex items-center gap-2 shrink-0">
+                  <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
+                  {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã</button>}
+                </div>
               </div>
 
               {/* Mã outsource — hàng riêng */}
@@ -868,22 +880,32 @@ const DetailView: React.FC<{
             <SectionTitle>Thông tin cơ hội kinh doanh</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
               {infoEditable ? (<>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Phòng ban / Khối</dt><dd><input value={pakd.department || ''} onChange={(e) => updPakdInfo({ department: e.target.value })} placeholder="—" className={iInp} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Loại dự án</dt><dd><input value={pakd.projectType || ''} onChange={(e) => updPakdInfo({ projectType: e.target.value })} placeholder="Fixed Cost / R&D / ODC…" className={iInp} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Mã khách hàng</dt><dd><input value={pakd.customerCode} onChange={(e) => updPakdInfo({ customerCode: e.target.value.toUpperCase() })} className={`${iInp} font-mono`} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tên khách hàng</dt><dd><input value={pakd.customerName} onChange={(e) => updPakdInfo({ customerName: e.target.value })} className={iInp} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Domain</dt><dd><select value={pakd.domain || ''} onChange={(e) => updPakdInfo({ domain: e.target.value })} className={iInp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></dd></div>
+                <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
+                <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
                 <DRow label="Sale / AM" value={pakd.creator} />
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">PM (Người quản lý dự án)</dt><dd><input value={pakd.pmName || ''} onChange={(e) => updPakdInfo({ pmName: e.target.value })} placeholder="Chưa có" className={iInp} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Người theo dõi</dt><dd><input value={pakd.followers || ''} onChange={(e) => updPakdInfo({ followers: e.target.value })} placeholder="Ngăn cách bằng dấu phẩy" className={iInp} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tiến độ (thời gian thực hiện)</dt><dd className="flex items-center gap-1">
                   <input type="date" value={pakd.projStart || ''} onChange={(e) => updPakdInfo({ projStart: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
                   <span className="text-gray-400">→</span>
                   <input type="date" value={pakd.projEnd || ''} onChange={(e) => updPakdInfo({ projEnd: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
                 </dd></div>
               </>) : (<>
+                <DRow label="Phòng ban / Khối" value={pakd.department || '—'} />
+                <DRow label="Loại dự án" value={pakd.projectType || '—'} />
                 <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
                 <DRow label="Tên khách hàng" value={pakd.customerName} />
                 <DRow label="Domain" value={pakd.domain || '—'} />
+                <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
+                <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
                 <DRow label="Sale / AM" value={pakd.creator} />
                 <DRow label="PM (Người quản lý dự án)" value={pakd.pmName || '—'} />
+                <DRow label="Người theo dõi" value={pakd.followers || '—'} />
                 <DRow label="Tiến độ (thời gian thực hiện)" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
               </>)}
             </dl>
@@ -899,6 +921,15 @@ const DetailView: React.FC<{
                 <DRow label="Chi phí dự kiến" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
               </>)}
               <DRow label="Lợi nhuận gộp dự kiến" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
+              {infoEditable ? (
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Hợp đồng đã ký</dt><dd>
+                  <select value={pakd.contractSigned ? '1' : '0'} onChange={(e) => updPakdInfo({ contractSigned: e.target.value === '1' })} className={iInp}>
+                    <option value="0">Chưa ký</option><option value="1">Đã ký</option>
+                  </select>
+                </dd></div>
+              ) : (
+                <DRow label="Hợp đồng đã ký" value={pakd.contractSigned ? 'Đã ký' : 'Chưa ký'} className={pakd.contractSigned ? 'text-green-600' : 'text-gray-500'} />
+              )}
             </dl>
           </div>
         </div>
@@ -985,6 +1016,12 @@ const DetailView: React.FC<{
                   onChange={(patch) => setPakd(p => ({ ...p, ...patch }))} />
               )}
 
+              {/* Bảng chi phí P&L — Kế toán duyệt chi */}
+              {viewVersion === null && (
+                <PnlApprovalPanel pakd={pakd} canApprove={['ACCOUNTANT', 'ADMIN'].includes(simUser.role)}
+                  onChange={(patch) => setPakd(p => ({ ...p, ...patch }))} />
+              )}
+
               {/* Nút gửi duyệt riêng cho khối kế hoạch/ngân sách */}
               {adjustMode && viewVersion === null && (
                 <div className="flex items-center justify-end gap-2 border-t border-orange-200 pt-3">
@@ -1004,6 +1041,8 @@ const DetailView: React.FC<{
         </div>
       </div>
 
+      {/* ===== TAB: Lịch sử & phê duyệt ===== */}
+      <div className={detailTab === 'HISTORY' ? 'space-y-4' : 'hidden'}>
       {/* version history */}
       {pakd.versionHistory.length > 0 && (
         <Panel title="Lịch sử phiên bản chi phí" icon={<GitBranch size={13} />}>
@@ -1066,6 +1105,19 @@ const DetailView: React.FC<{
           </Panel>
         );
       })()}
+      </div>
+
+      {/* Tab dưới cùng: Tổng quan & phương án | Lịch sử & phê duyệt */}
+      <div className="flex border-b border-gray-200">
+        <button onClick={() => setDetailTab('OVERVIEW')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${detailTab === 'OVERVIEW' ? 'border-blue-600 text-blue-600 bg-blue-50/50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          Tổng quan &amp; phương án
+        </button>
+        <button onClick={() => setDetailTab('HISTORY')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${detailTab === 'HISTORY' ? 'border-blue-600 text-blue-600 bg-blue-50/50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          Lịch sử &amp; phê duyệt
+        </button>
+      </div>
       </div>
 
       {/* Right column: Trao đổi & Ghi chú */}
@@ -2238,6 +2290,81 @@ const CostAllocationPanel: React.FC<{
   );
 };
 
+// ===================== BẢNG CHI PHÍ P&L — KẾ TOÁN DUYỆT CHI =====================
+// Liệt kê các hạng mục chi phí (P&L) kèm số Kế toán duyệt chi cho từng hạng mục.
+const PnlApprovalPanel: React.FC<{
+  pakd: Pakd; canApprove: boolean; onChange: (patch: Partial<Pakd>) => void;
+}> = ({ pakd, canApprove, onChange }) => {
+  const [saved, setSaved] = useState(false);
+  const cats = pakd.budgetCategories || [];
+  const hasData = cats.some(c => (c.excelTotal || 0) > 0 || catAllocated(c) > 0);
+  const updApproved = (id: string, v: number) =>
+    onChange({ budgetCategories: cats.map(c => c.id === id ? { ...c, approved: v } : c) });
+
+  const totPlan = cats.reduce((s, c) => s + (c.excelTotal || 0), 0);
+  const totAlloc = cats.reduce((s, c) => s + catAllocated(c), 0);
+  const totApproved = cats.reduce((s, c) => s + (c.approved || 0), 0);
+  const td = 'px-2 py-1.5 border-r border-gray-200 text-right whitespace-nowrap';
+
+  return (
+    <div className="border border-gray-200 rounded">
+      <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Bảng chi phí P&L — Kế toán duyệt chi</span>
+        {canApprove && hasData && (
+          <button onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2500); }}
+            className="ml-auto flex items-center px-3 py-1.5 bg-[#007bff] text-white text-xs font-semibold rounded hover:bg-blue-600">
+            <Check size={13} className="mr-1" />Lưu duyệt chi
+          </button>
+        )}
+        {saved && <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600"><Check size={13} />Đã lưu</span>}
+      </div>
+      {!hasData ? (
+        <p className="px-3 py-3 text-[11px] text-gray-500 italic">Chưa có khoản chi P&L nào được lập cho phương án này.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+                <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: 190 }}>Hạng mục chi phí</th>
+                <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: 130 }}>Kế hoạch (Excel)</th>
+                <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right" style={{ minWidth: 130 }}>Đã phân bổ</th>
+                <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right bg-blue-50" style={{ minWidth: 140 }}>Kế toán duyệt chi</th>
+                <th className="px-2 py-1.5 font-semibold text-right" style={{ minWidth: 130 }}>Chênh lệch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cats.map(c => {
+                const app = c.approved || 0;
+                const d = app - (c.excelTotal || 0);
+                return (
+                  <tr key={c.id} className="border-b border-gray-200 hover:bg-gray-50">
+                    <td className={`px-2 py-1.5 border-r border-gray-200 ${c.group ? 'pl-6 italic text-gray-700' : 'font-semibold text-gray-800'}`}>{c.label}</td>
+                    <td className={td}>{fmtFull(c.excelTotal || 0)}</td>
+                    <td className={`${td} text-gray-500`}>{fmtFull(catAllocated(c))}</td>
+                    <td className={`${td} bg-blue-50/40`}>
+                      {canApprove
+                        ? <NumberInput value={app} onChange={v => updApproved(c.id, v)} className="w-full text-right text-[11px] border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-blue-400 font-semibold" />
+                        : <b className="text-gray-800">{fmtFull(app)}</b>}
+                    </td>
+                    <td className={`px-2 py-1.5 text-right font-semibold ${d > 0 ? 'text-red-600' : d < 0 ? 'text-amber-600' : 'text-gray-400'}`}>{app ? fmtFull(d) : '—'}</td>
+                  </tr>
+                );
+              })}
+              <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                <td className="px-2 py-1.5 border-r border-gray-300 text-gray-800">Tổng cộng</td>
+                <td className={td}>{fmtFull(totPlan)}</td>
+                <td className={`${td} text-gray-600`}>{fmtFull(totAlloc)}</td>
+                <td className={`${td} bg-blue-50 text-blue-700`}>{fmtFull(totApproved)}</td>
+                <td className={`px-2 py-1.5 text-right ${totApproved - totPlan > 0 ? 'text-red-600' : 'text-gray-500'}`}>{totApproved ? fmtFull(totApproved - totPlan) : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
   pakd: Pakd; editable: boolean; currentPhase: number; phaseIdx: number; canEditSpent: boolean;
@@ -2771,3 +2898,4 @@ const ChangeRequestModal: React.FC<{ pakd: Pakd; onClose: () => void; onSubmit: 
     </div>
   );
 };
+

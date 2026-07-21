@@ -159,6 +159,11 @@ const RAW_PAKDS: Pakd[] = [
     ],
     jiraKey: 'VIETTE',
     jiraUrl: 'https://vtx-jira.atlassian.net/projects/VIETTE',
+    // Chi thực tế do Kế toán import hàng tháng (cộng dồn theo dự án)
+    accountingSpends: [
+      { id: 'ACS-689-1', at: '2026-07-31', production: 3500000000, business: 1200000000, by: 'Lê Thị Mai', importedAt: '2026-08-01 09:15' },
+      { id: 'ACS-689-2', at: '2026-08-31', production: 2800000000, business: 900000000, by: 'Lê Thị Mai', importedAt: '2026-09-01 08:40' },
+    ],
     steps: [
       {
         id: 'S1', order: 1, name: 'Chi phí Kinh doanh', assignee: 'Lê Thu Trang (Sale)', startDate: '2026-05-10', endDate: '2026-06-30', note: 'Chi phí phát triển cơ hội, làm hồ sơ thầu và bán hàng',

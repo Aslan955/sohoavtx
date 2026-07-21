@@ -79,6 +79,7 @@ export interface BudgetCategory {
   kind: BudgetCategoryKind;  // PRODUCTION/BUSINESS được đồng bộ về ngân sách giai đoạn
   excelTotal: number;        // Tổng (Excel) — mục tiêu cần phân bổ đủ
   alloc: number[];           // phân bổ theo chỉ số giai đoạn (KH01 = [0])
+  approved?: number;         // Kế toán duyệt chi cho hạng mục này
 }
 
 export const catAllocated = (c: BudgetCategory): number => (c.alloc || []).reduce((s, v) => s + (v || 0), 0);
@@ -237,6 +238,10 @@ export interface Pakd {
   versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   isKeyProject?: boolean; // dự án trọng điểm (đánh dấu để ưu tiên theo dõi)
+  department?: string;    // Phòng ban / Khối phụ trách
+  projectType?: string;   // Loại dự án (Fixed Cost / R&D / ODC / Staffing...)
+  followers?: string;     // Người theo dõi (danh sách, phân tách bằng dấu phẩy)
+  contractSigned?: boolean; // Hợp đồng đã ký hay chưa
   businessPM?: string;    // PM (quản trị dự án) phụ trách mã kinh doanh
   productionPM?: string;  // PM phụ trách mã sản xuất
   accountingSpends?: AccountingSpend[]; // chi thực tế do Kế toán import hàng tháng (theo dự án)
