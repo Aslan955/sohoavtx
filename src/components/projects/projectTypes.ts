@@ -64,6 +64,25 @@ export const costPlanOf = (step: { contractBeforeVat?: number; costLines?: CostL
   return { contract, rnd, net, sx, kd, audit, finance, overhead, totalCost, profit, margin: contract > 0 ? (profit / contract) * 100 : 0 };
 };
 
+// ----- Hạng mục chi phí & phân bổ ngân sách theo giai đoạn -----
+// Tổng (Excel) = số gốc lấy từ file PAKD; alloc = phân bổ số đó cho từng giai đoạn KH.
+// kind PRODUCTION/BUSINESS được đồng bộ ngược lại productionBudget/businessBudget của giai đoạn
+// để bảng giai đoạn (Overview) luôn khớp; OTHER là hạng mục tự thêm (vd CP dự phòng kiểm toán).
+export type BudgetCategoryKind = 'PRODUCTION' | 'BUSINESS' | 'OTHER';
+
+export interface BudgetCategory {
+  id: string;
+  label: string;
+  sub?: string;              // nhãn phụ hiển thị dưới tên
+  group?: string;            // nhóm hiển thị (vd "Chi phí sản xuất / phát triển dự án")
+  note?: string;             // ghi chú/cách tính lấy từ file PAKD
+  kind: BudgetCategoryKind;  // PRODUCTION/BUSINESS được đồng bộ về ngân sách giai đoạn
+  excelTotal: number;        // Tổng (Excel) — mục tiêu cần phân bổ đủ
+  alloc: number[];           // phân bổ theo chỉ số giai đoạn (KH01 = [0])
+}
+
+export const catAllocated = (c: BudgetCategory): number => (c.alloc || []).reduce((s, v) => s + (v || 0), 0);
+
 // Một khoản chi phí thuộc 1 bước.
 export interface CostItem {
   id: string;
@@ -221,6 +240,7 @@ export interface Pakd {
   businessPM?: string;    // PM (quản trị dự án) phụ trách mã kinh doanh
   productionPM?: string;  // PM phụ trách mã sản xuất
   accountingSpends?: AccountingSpend[]; // chi thực tế do Kế toán import hàng tháng (theo dự án)
+  budgetCategories?: BudgetCategory[];  // hạng mục chi phí + phân bổ ngân sách theo giai đoạn
   editingRole?: UserRole; // vai trò đang sửa phương án khi PAKD đang duyệt (tạm dừng duyệt)
   editingSnapshot?: PlanStepSnap[]; // ảnh chụp trước khi sửa (để tạo diff phiên bản)
 }

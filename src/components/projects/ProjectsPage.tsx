@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck,
+  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck, AlertTriangle,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
-  stepCost, stepActualCost, pakdTotalCost, pakdActualCost,
+  stepCost, stepActualCost, pakdTotalCost, pakdActualCost, BudgetCategory, BudgetCategoryKind, catAllocated,
 } from './projectTypes';
 import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, makePhases, khCode,
@@ -978,6 +978,12 @@ const DetailView: React.FC<{
                     onAddPhase={addPhase} onRmPhase={rmPhase} onImport={importPhases} onSetCurrentPhase={setCurrentPhase} />
                 );
               })()}
+
+              {/* Chi phí dự án — phân bổ ngân sách theo giai đoạn (đặt dưới form nhập liệu) */}
+              {viewVersion === null && (
+                <CostAllocationPanel pakd={pakd} editable={editable || adjustMode}
+                  onChange={(patch) => setPakd(p => ({ ...p, ...patch }))} />
+              )}
 
               {/* Nút gửi duyệt riêng cho khối kế hoạch/ngân sách */}
               {adjustMode && viewVersion === null && (
@@ -2080,6 +2086,157 @@ const ImportPhasesModal: React.FC<{ stepCount: number; onClose: () => void; onIm
   );
 };
 
+// ===================== CHI PHÍ DỰ ÁN — Phân bổ ngân sách theo giai đoạn =====================
+// Ma trận: hạng mục chi phí × giai đoạn KH. Cột "Tổng (Excel)" là số gốc từ file PAKD cần phân bổ đủ.
+// Hạng mục Sản xuất/Kinh doanh được đồng bộ ngược về productionBudget/businessBudget để bảng Overview khớp.
+// Danh mục chi phí theo bảng P&L của file PAKD (Excel). Dòng có group = thuộc nhóm; còn lại là hạng mục độc lập.
+const GRP_SX = 'Chi phí sản xuất / phát triển dự án';
+const GRP_KD = 'Chi phí kinh doanh';
+const defaultCategories = (pakd: Pakd): BudgetCategory[] => {
+  const n = pakd.steps.length;
+  const zero = () => Array(n).fill(0);
+  // Giữ dữ liệu cũ: NS sản xuất → "Chi phí phát triển", NS kinh doanh → "Chi phí lương kinh doanh"
+  const prodAlloc = pakd.steps.map(st => st.productionBudget || 0);
+  const bizAlloc = pakd.steps.map(st => st.businessBudget || 0);
+  const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
+  const mk = (id: string, label: string, kind: BudgetCategoryKind, group?: string, note?: string, alloc?: number[]): BudgetCategory =>
+    ({ id, label, kind, group, note, excelTotal: sum(alloc || zero()), alloc: alloc || zero() });
+  return [
+    mk('BC-RND', 'R&D', 'OTHER', undefined, '% trên giá trị hợp đồng'),
+    mk('BC-SX1', 'Chi phí phát triển', 'PRODUCTION', GRP_SX, undefined, prodAlloc),
+    mk('BC-SX2', 'Chi phí BHBT', 'PRODUCTION', GRP_SX),
+    mk('BC-SX3', 'Chi phí dự phòng', 'PRODUCTION', GRP_SX, 'Dùng khi KH điều chỉnh scope of work'),
+    mk('BC-KD1', 'Chi phí lương kinh doanh', 'BUSINESS', GRP_KD, undefined, bizAlloc),
+    mk('BC-KD2', 'Chi phí đối ngoại', 'BUSINESS', GRP_KD, '1% giá trị DT thuần'),
+    mk('BC-KD3', 'Công tác phí', 'BUSINESS', GRP_KD, '0.5% giá trị DT thuần'),
+    mk('BC-KD4', 'Chi phí dự phòng', 'BUSINESS', GRP_KD, 'Dùng khi phát sinh chi phí cho khách hàng'),
+    mk('BC-AUD', 'Chi phí dự phòng kiểm toán', 'OTHER', undefined, '3% giá trị TMĐT (~4,69% giá trị net)'),
+    mk('BC-FIN', 'Chi phí tài chính', 'OTHER', undefined, '5% chi phí lương KD'),
+    mk('BC-OPS', 'Chi phí chung vận hành, quản lý', 'OTHER', undefined, '5,87% chi phí lương KD'),
+    mk('BC-BON', 'Chi phí thưởng dự án', 'OTHER', undefined, '15% lợi nhuận trước thuế'),
+  ];
+};
+
+const CostAllocationPanel: React.FC<{
+  pakd: Pakd; editable: boolean; onChange: (patch: Partial<Pakd>) => void;
+}> = ({ pakd, editable, onChange }) => {
+  const steps = pakd.steps;
+  const n = steps.length;
+  // chuẩn hoá: đảm bảo có hạng mục & độ dài alloc khớp số giai đoạn
+  const cats: BudgetCategory[] = (pakd.budgetCategories?.length ? pakd.budgetCategories : defaultCategories(pakd))
+    .map(c => ({ ...c, alloc: Array.from({ length: n }, (_, i) => c.alloc?.[i] || 0) }));
+
+  // Ghi thay đổi + đồng bộ ngân sách giai đoạn cho 2 hạng mục hệ thống
+  const push = (next: BudgetCategory[]) => {
+    const sx = next.find(c => c.kind === 'PRODUCTION');
+    const kd = next.find(c => c.kind === 'BUSINESS');
+    const newSteps = steps.map((st, i) => ({
+      ...st,
+      productionBudget: sx ? (sx.alloc[i] || 0) : st.productionBudget,
+      businessBudget: kd ? (kd.alloc[i] || 0) : st.businessBudget,
+    }));
+    onChange({ budgetCategories: next, steps: newSteps });
+  };
+  const updCat = (id: string, patch: Partial<BudgetCategory>) => push(cats.map(c => c.id === id ? { ...c, ...patch } : c));
+  const updAlloc = (id: string, idx: number, v: number) => push(cats.map(c => c.id === id ? { ...c, alloc: c.alloc.map((a, i) => i === idx ? v : a) } : c));
+  const addCat = () => push([...cats, { id: rid('BC'), label: 'Hạng mục chi phí mới', kind: 'OTHER', excelTotal: 0, alloc: Array(n).fill(0) }]);
+  const rmCat = (id: string) => push(cats.filter(c => c.id !== id));
+
+  const colTotal = (i: number) => cats.reduce((s, c) => s + (c.alloc[i] || 0), 0);
+  const totalAllocated = cats.reduce((s, c) => s + catAllocated(c), 0);
+  const totalExcel = cats.reduce((s, c) => s + (c.excelTotal || 0), 0);
+  const diff = totalAllocated - totalExcel;
+
+  const numCell = 'w-full text-right text-[11px] border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-blue-400';
+  const td = 'px-2 py-1.5 border-r border-gray-200 text-right whitespace-nowrap';
+
+  return (
+    <div className="border border-gray-200 rounded">
+      <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center gap-1.5 flex-wrap">
+        <Wallet size={13} className="text-blue-600" />
+        <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">Chi phí dự án — Phân bổ ngân sách theo giai đoạn</span>
+        {editable && <button onClick={addCat} className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><Plus size={11} />Thêm hạng mục</button>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+              <th className="px-2 py-1.5 font-semibold border-r border-gray-300 text-left" style={{ minWidth: 175 }}>Hạng mục chi phí</th>
+              {steps.map((_, i) => <th key={i} className="px-2 py-1.5 font-semibold border-r border-gray-300 text-right whitespace-nowrap" style={{ minWidth: 105 }}>{khCode(i)}</th>)}
+              <th className="px-2 py-1.5 font-semibold text-right whitespace-nowrap bg-gray-200" style={{ minWidth: 125 }}>Tổng (Excel)</th>
+              {editable && <th className="px-1 py-1.5" style={{ width: 28 }}></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {cats.map((c, ci) => {
+              const allocated = catAllocated(c);
+              const rowDiff = allocated - (c.excelTotal || 0);
+              const inGroup = !!c.group;
+              const groupStart = inGroup && cats[ci - 1]?.group !== c.group;
+              const members = inGroup ? cats.filter(x => x.group === c.group) : [];
+              return (
+                <React.Fragment key={c.id}>
+                  {/* Dòng tiêu đề nhóm + tổng của nhóm */}
+                  {groupStart && (
+                    <tr className="bg-slate-50 border-b border-gray-200">
+                      <td className="px-2 py-1.5 border-r border-gray-200 font-bold text-slate-700">{c.group}</td>
+                      {steps.map((_, i) => <td key={i} className={`${td} font-semibold text-slate-600`}>{fmtFull(members.reduce((s, m) => s + (m.alloc[i] || 0), 0))}</td>)}
+                      <td className="px-2 py-1.5 text-right font-bold bg-slate-100 text-slate-700">{fmtFull(members.reduce((s, m) => s + (m.excelTotal || 0), 0))}</td>
+                      {editable && <td></td>}
+                    </tr>
+                  )}
+                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                    <td className={`px-2 py-1.5 border-r border-gray-200 ${inGroup ? 'pl-6' : ''}`}>
+                      {editable
+                        ? <input value={c.label} onChange={e => updCat(c.id, { label: e.target.value })} title={c.note} className={`w-full text-[11px] border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-blue-400 ${inGroup ? 'italic text-gray-700' : 'font-semibold'}`} />
+                        : <span title={c.note} className={inGroup ? 'italic text-gray-700' : 'font-semibold text-gray-800'}>{c.label}</span>}
+                      {c.note && <span className="block text-[9px] text-gray-400 truncate" title={c.note}>{c.note}</span>}
+                    </td>
+                    {steps.map((_, i) => (
+                      <td key={i} className={td}>
+                        {editable
+                          ? <NumberInput value={c.alloc[i] || 0} onChange={v => updAlloc(c.id, i, v)} className={numCell} />
+                          : fmtFull(c.alloc[i] || 0)}
+                      </td>
+                    ))}
+                    <td className="px-2 py-1.5 text-right bg-gray-50">
+                      {editable
+                        ? <NumberInput value={c.excelTotal || 0} onChange={v => updCat(c.id, { excelTotal: v })} className={`${numCell} font-bold ${rowDiff !== 0 ? 'text-red-600 border-red-300' : 'text-gray-700'}`} />
+                        : <b className={rowDiff !== 0 ? 'text-red-600' : 'text-gray-800'}>{fmtFull(c.excelTotal || 0)}</b>}
+                    </td>
+                    {editable && (
+                      <td className="px-1 py-1.5 text-center">
+                        <button onClick={() => rmCat(c.id)} title="Xóa hạng mục" className="p-0.5 text-gray-300 hover:text-red-600"><Trash2 size={12} /></button>
+                      </td>
+                    )}
+                  </tr>
+                </React.Fragment>
+              );
+            })}
+            <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+              <td className="px-2 py-1.5 border-r border-gray-300 text-gray-800">Đã phân bổ</td>
+              {steps.map((_, i) => <td key={i} className={`${td} text-gray-900`}>{fmtFull(colTotal(i))}</td>)}
+              <td className={`px-2 py-1.5 text-right bg-gray-200 ${diff !== 0 ? 'text-red-600' : 'text-blue-700'}`}>{fmtFull(totalAllocated)}</td>
+              {editable && <td></td>}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {diff !== 0 && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border-t border-red-200 text-[11px] text-red-700">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>Chênh lệch <b>{fmtFull(Math.abs(diff))}</b> {diff > 0 ? 'vượt' : 'thiếu'} so với tổng ngân sách gốc (<b>{fmtFull(totalExcel)}</b>) — cần phân bổ khớp trước khi trình duyệt.</span>
+        </div>
+      )}
+      {diff === 0 && totalExcel > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border-t border-green-200 text-[11px] text-green-700">
+          <Check size={13} className="shrink-0" /><span>Đã phân bổ khớp tổng ngân sách gốc (<b>{fmtFull(totalExcel)}</b>).</span>
+        </div>
+      )}
+      <p className="px-3 py-1.5 text-[10px] text-gray-400 border-t border-gray-100">Số phân bổ Sản xuất / Kinh doanh được đồng bộ ngược lại bảng giai đoạn phía trên.</p>
+    </div>
+  );
+};
 
 // ===================== Bảng nhập thông tin các giai đoạn (dạng lưới Excel) =====================
 const PhaseTable: React.FC<{
