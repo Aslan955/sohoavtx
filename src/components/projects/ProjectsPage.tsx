@@ -2,20 +2,22 @@ import React, { useState } from 'react';
 import {
   Plus, ChevronRight, ChevronDown, Search, Eye, Check, Ban, FileEdit, Lock, Trash2,
   Target, ArrowLeft, FileSpreadsheet, GitBranch, ChevronUp, MessageSquare, Send, X, LogOut, Layers, LogIn, CheckCircle2, Paperclip, History,
-  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck, AlertTriangle, MoreHorizontal,
+  Upload, Download, RotateCcw, Bell, Star, Wallet, UserCheck, AlertTriangle, MoreHorizontal, PieChart,
 } from 'lucide-react';
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost, BudgetCategory, BudgetCategoryKind, catAllocated,
+  effectiveCurrentPhase,
 } from './projectTypes';
 import {
-  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, makePhases, khCode,
+  INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, PROJECT_TYPES, makePhases, khCode,
 } from './projectData';
 import { BodDashboard, countAlerts } from './BodDashboard';
 import { BusinessDirectorDashboard } from './BusinessDirectorDashboard';
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
 import { AccountingImportPage, accountingTotal } from './AccountingImportPage';
 import { BulkImportPage } from './BulkImportPage';
+import { PhaseKanbanPage } from './PhaseKanbanPage';
 import { AccountingSpend } from './projectTypes';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -24,6 +26,7 @@ import {
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent, editActualSpent, lockedSpentTotal,
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage, applyPlanImport,
+  movePakdPhase,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'BLOCK_DASH' | 'CUSTOMERS' | 'ACCOUNTING' | 'IMPORT';
@@ -60,14 +63,6 @@ const NumberInput: React.FC<{
   );
 };
 
-// Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
-const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
-// Giai đoạn hiện tại của 1 PAKD = max(giá trị đã lưu, KH xa nhất đã có thông tin).
-const effectiveCurrentPhase = (p: Pakd): number => {
-  const furthest = p.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0);
-  return Math.max(p.currentPhase || 1, furthest);
-};
-
 const PakdStatusCell: React.FC<{ status: string }> = ({ status }) => (
   <div className="flex items-center space-x-1.5">
     <span className={`w-2 h-2 rounded-full ${STATUS_DOT[status] || 'bg-gray-400'}`} />
@@ -75,7 +70,7 @@ const PakdStatusCell: React.FC<{ status: string }> = ({ status }) => (
   </div>
 );
 
-export const ProjectsPage: React.FC = () => {
+export const ProjectsPage: React.FC<{ route?: 'PROJECTS' | 'ACCOUNTING' | 'KANBAN' }> = ({ route = 'PROJECTS' }) => {
   const [pakds, setPakds] = useState<Pakd[]>(INITIAL_PAKDS);
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS); // danh mục khách hàng dùng chung
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -93,7 +88,7 @@ export const ProjectsPage: React.FC = () => {
   const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
 
-  const current = pakds.find(p => p.id === selectedId);
+  const current = route === 'ACCOUNTING' ? undefined : pakds.find(p => p.id === selectedId);
   const setPakd = (id: string, fn: (p: Pakd) => Pakd) => setPakds(prev => prev.map(p => p.id === id ? fn(p) : p));
 
   const runAction = (id: string, fn: (p: Pakd, log: AuditLogEntry[]) => { pakd: Pakd; error?: string }) => {
@@ -165,7 +160,7 @@ export const ProjectsPage: React.FC = () => {
           <ChevronRight size={14} className="mx-2 text-gray-400" />
           <span className="text-gray-500 font-medium">Project Management</span>
           <ChevronRight size={14} className="mx-2 text-gray-400" />
-          <span className="text-gray-900 font-medium">Quản lý PAKD đấu thầu</span>
+          <span className="text-gray-900 font-medium">{route === 'ACCOUNTING' ? 'Chi thực tế (Kế toán)' : route === 'KANBAN' ? 'Bảng giai đoạn dự án' : 'Quản lý PAKD đấu thầu'}</span>
           {current && (<><ChevronRight size={14} className="mx-2 text-gray-400" /><span className="text-blue-600 font-semibold">{current.id}</span></>)}
         </div>
         <div className="flex items-center gap-3">
@@ -178,7 +173,7 @@ export const ProjectsPage: React.FC = () => {
             </div>
             <button onClick={logout} title="Đăng xuất" className="ml-1 text-gray-400 hover:text-red-600 flex items-center gap-1"><LogOut size={13} /></button>
           </div>
-          {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && !current && (
+          {route === 'PROJECTS' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && !current && (
             <button onClick={createDraftInline} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
               <Plus size={16} className="mr-1" />Tạo dự án
             </button>
@@ -208,20 +203,28 @@ export const ProjectsPage: React.FC = () => {
           onEditSpent={(sid, total) => runAction(current.id, (p, l) => editActualSpent(p, sid, total, simUser.fullName, simUser.role, l))}
           onStartEdit={() => runAction(current.id, (p, l) => startEditDuringApproval(p, simUser.role, simUser.fullName, l))}
           onSubmitEdit={() => runAction(current.id, (p, l) => submitEditDuringApproval(p, simUser.role, simUser.fullName, l))} />
+      ) : route === 'KANBAN' ? (
+        /* ===== Màn hình riêng: Bảng giai đoạn (Kanban KH01–KH06) — mở từ menu dọc ===== */
+        <PhaseKanbanPage pakds={pakds} simUser={simUser} onOpen={setSelectedId}
+          onMove={(id, targetOrder, plan) => runAction(id, (p, l) => movePakdPhase(p, targetOrder, plan, simUser.fullName, simUser.role, l))} />
+      ) : route === 'ACCOUNTING' ? (
+        /* ===== Màn hình riêng: Chi thực tế (Kế toán) — mở từ menu dọc ===== */
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+            <Wallet size={16} className="text-blue-600" />
+            <h2 className="text-base font-bold text-gray-800">Chi thực tế (Kế toán)</h2>
+          </div>
+          <AccountingImportPage pakds={pakds} simUser={simUser} onImport={(items) => {
+            setPakds(prev => prev.map(p => { const mine = items.filter(it => it.pakdId === p.id).map(it => it.spend); return mine.length ? { ...p, accountingSpends: [...(p.accountingSpends || []), ...mine] } : p; }));
+          }} />
+        </div>
       ) : (
         <>
-          {/* Module tabs */}
+          {/* Module tabs — 3 tab chính (các mục khác chuyển sang menu dọc / ẩn) */}
           <div className="flex border-b border-gray-200 mb-4">
-            {['BOD', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard BOD" count={countAlerts(pakds)} active={moduleTab === 'DASHBOARD'} onClick={() => setModuleTab('DASHBOARD')} />}
-            {['BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role) && <ModTab label="Dashboard GĐ Khối" active={moduleTab === 'BLOCK_DASH'} onClick={() => setModuleTab('BLOCK_DASH')} />}
             <ModTab label="Danh sách PAKD" active={moduleTab === 'LIST'} onClick={() => setModuleTab('LIST')} />
-            <ModTab label="Đơn của tôi" count={mine.length} active={moduleTab === 'MINE'} onClick={() => setModuleTab('MINE')} />
-            <ModTab label="Khách hàng" active={moduleTab === 'CUSTOMERS'} onClick={() => setModuleTab('CUSTOMERS')} />
-            {['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role) && <ModTab label="Import PAKD" active={moduleTab === 'IMPORT'} onClick={() => setModuleTab('IMPORT')} />}
-            <ModTab label="Chi thực tế (Kế toán)" active={moduleTab === 'ACCOUNTING'} onClick={() => setModuleTab('ACCOUNTING')} />
             <ModTab label="Hàng đợi duyệt" count={pendingPakd.length} active={moduleTab === 'APPROVALS'} onClick={() => setModuleTab('APPROVALS')} />
-            <ModTab label="Phiếu điều chỉnh CP" count={pendingCR.length} active={moduleTab === 'CHANGES'} onClick={() => setModuleTab('CHANGES')} />
-            <ModTab label="Nhật ký hệ thống" active={moduleTab === 'AUDIT'} onClick={() => setModuleTab('AUDIT')} />
+            {['BUSINESS_DIRECTOR', 'ADMIN'].includes(simUser.role) && <ModTab label="Tổng quan Khối (HOD)" icon={<PieChart size={15} className="text-blue-600" />} active={moduleTab === 'BLOCK_DASH'} onClick={() => setModuleTab('BLOCK_DASH')} />}
           </div>
 
           {moduleTab === 'DASHBOARD' && <BodDashboard pakds={pakds} simUser={simUser} onOpen={setSelectedId} />}
@@ -313,9 +316,9 @@ const LoginScreen: React.FC<{ onLogin: (u: typeof SYSTEM_USERS[number]) => void 
 };
 
 // ===== small components =====
-const ModTab: React.FC<{ label: string; count?: number; active: boolean; onClick: () => void }> = ({ label, count, active, onClick }) => (
-  <button onClick={onClick} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${active ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-    {label}{count !== undefined && count > 0 && <span className="ml-1.5 bg-orange-100 text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{count}</span>}
+const ModTab: React.FC<{ label: string; count?: number; active: boolean; onClick: () => void; icon?: React.ReactNode }> = ({ label, count, active, onClick, icon }) => (
+  <button onClick={onClick} className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${active ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+    {icon}{label}{count !== undefined && count > 0 && <span className="ml-1.5 bg-orange-100 text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{count}</span>}
   </button>
 );
 
@@ -416,8 +419,8 @@ const ListView: React.FC<{
       <table className="w-full text-[11px] border-collapse">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-            <Th w="36px">#</Th><Th w="90px">Mã PAKD</Th><Th w="90px">Mã tổng</Th><Th w="220px">Tên dự án / gói thầu</Th>
-            <Th w="110px">Số hiệu gói thầu</Th><Th w="180px">Chủ đầu tư</Th><Th w="120px">Hình thức</Th>
+            <Th w="36px">#</Th><Th w="90px">Mã tổng</Th><Th w="220px">Tên dự án</Th>
+            <Th w="110px">Số hiệu gói thầu</Th><Th w="180px">Khách hàng</Th><Th w="120px">Loại dự án</Th>
             <Th w="90px" right>Giá dự thầu</Th><Th w="90px" right>Tổng chi phí</Th><Th w="80px" right>LN (%)</Th>
             <Th w="80px" center>Giai đoạn</Th><Th w="120px">Trạng thái</Th><Th w="50px" center>Ver</Th><Th w="70px" center>Thao tác</Th>
           </tr>
@@ -428,12 +431,11 @@ const ListView: React.FC<{
             return (
               <tr key={p.id} className="border-b border-gray-200 hover:bg-blue-50 transition-colors">
                 <Td center muted>{i + 1}</Td>
-                <Td><button onClick={() => onOpen(p.id)} className="text-blue-600 font-semibold hover:underline">{p.id}</button></Td>
                 <Td mono>{p.masterCode ? <span className="text-gray-800 font-semibold">{p.masterCode}</span> : <span className="text-gray-300">—</span>}</Td>
                 <Td><span className="text-gray-800 font-medium flex items-center gap-1">{p.isKeyProject && <Star size={12} className="fill-amber-500 text-amber-500 shrink-0" />}{p.name}</span></Td>
                 <Td mono>{p.tender.packageCode}</Td>
                 <Td>{p.customerName}</Td>
-                <Td>{p.tender.biddingMethod}</Td>
+                <Td>{p.projectType || <span className="text-gray-300">—</span>}</Td>
                 <Td right>{fmtB(p.revenue)}</Td>
                 <Td right>{fmtB(total)}</Td>
                 <Td right><span className={profit >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{p.revenue ? ((profit / p.revenue) * 100).toFixed(1) : 0}%</span></Td>
@@ -444,7 +446,7 @@ const ListView: React.FC<{
               </tr>
             );
           })}
-          {pakds.length === 0 && <tr><td colSpan={14} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
+          {pakds.length === 0 && <tr><td colSpan={13} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -514,8 +516,8 @@ const DetailView: React.FC<{
   const [showComments, setShowComments] = useState(false);
   const costVersions = pakd.costVersions || 0;
   const addVersionColumn = () => setPakd(p => ({ ...p, costVersions: (p.costVersions || 0) + 1 }));
-  const setCurrentPhase = (n: number) => setPakd(p => ({ ...p, currentPhase: n }));
-  // Giai đoạn hiện tại luôn ít nhất bằng KH xa nhất đã có thông tin.
+  // Người dùng chọn tay -> đánh dấu phaseManual để không bị suy ngược về KH xa nhất đã có thông tin.
+  const setCurrentPhase = (n: number) => setPakd(p => ({ ...p, currentPhase: n, phaseManual: true }));
   const currentPhase = effectiveCurrentPhase(pakd);
   const [adjusting, setAdjusting] = useState(false);
   // Sau khi khóa (đã duyệt V1), Sale mở "phiếu điều chỉnh" để bổ sung/đổi tên/xóa khoản chi phí ở cột V mới
@@ -825,28 +827,26 @@ const DetailView: React.FC<{
                     <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{pakd.productionCode}</span>
                     <span className="text-[11px] text-gray-500">(PM: {pakd.productionPM || pakd.businessDirector || <i className="text-gray-400">chưa gán</i>})</span>
                   </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length})</span>
+                    {pakd.outsourceCodes.length === 0 ? (
+                      <span className="text-[11px] text-gray-400 italic">Chưa có</span>
+                    ) : (
+                      <span className="flex flex-wrap items-center gap-y-0.5">
+                        {pakd.outsourceCodes.map((o, i) => (
+                          <React.Fragment key={o.id}>
+                            {i > 0 && <span className="mx-2 text-gray-300">—</span>}
+                            <span title={o.label} className="text-sm font-bold font-mono text-blue-700 tracking-wider">{o.code}</span>
+                          </React.Fragment>
+                        ))}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="px-4 py-3 flex items-center gap-2 shrink-0">
                   <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
                   {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã</button>}
                 </div>
-              </div>
-
-              {/* Mã outsource — hàng riêng */}
-              <div className="bg-white border border-blue-200 rounded-md px-3 py-2 flex items-center gap-2 flex-wrap">
-                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Mã outsource ({pakd.outsourceCodes.length})</span>
-                {pakd.outsourceCodes.length === 0 ? (
-                  <span className="text-[11px] text-gray-400 italic">Chưa có</span>
-                ) : (
-                  <span className="flex flex-wrap items-center gap-y-0.5">
-                    {pakd.outsourceCodes.map((o, i) => (
-                      <React.Fragment key={o.id}>
-                        {i > 0 && <span className="mx-2 text-gray-300">—</span>}
-                        <span title={o.label} className="text-sm font-bold font-mono text-blue-700 tracking-wider">{o.code}</span>
-                      </React.Fragment>
-                    ))}
-                  </span>
-                )}
               </div>
 
               {/* Mở mã outsource: hiện ngay sau khi tạo dự án (đã có mã sản xuất) cho các vai trò tạo được dự án, kể cả còn nháp */}
@@ -880,33 +880,34 @@ const DetailView: React.FC<{
             <SectionTitle>Thông tin cơ hội kinh doanh</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
               {infoEditable ? (<>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Phòng ban / Khối</dt><dd><input value={pakd.department || ''} onChange={(e) => updPakdInfo({ department: e.target.value })} placeholder="—" className={iInp} /></dd></div>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Loại dự án</dt><dd><input value={pakd.projectType || ''} onChange={(e) => updPakdInfo({ projectType: e.target.value })} placeholder="Fixed Cost / R&D / ODC…" className={iInp} /></dd></div>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Mã khách hàng</dt><dd><input value={pakd.customerCode} onChange={(e) => updPakdInfo({ customerCode: e.target.value.toUpperCase() })} className={`${iInp} font-mono`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Khối</dt><dd><input value={pakd.department || ''} onChange={(e) => updPakdInfo({ department: e.target.value })} placeholder="—" className={iInp} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Loại dự án</dt><dd><select value={pakd.projectType || ''} onChange={(e) => updPakdInfo({ projectType: e.target.value })} className={iInp}>
+                  <option value="">—</option>
+                  {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tên khách hàng</dt><dd><input value={pakd.customerName} onChange={(e) => updPakdInfo({ customerName: e.target.value })} className={iInp} /></dd></div>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Domain</dt><dd><select value={pakd.domain || ''} onChange={(e) => updPakdInfo({ domain: e.target.value })} className={iInp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Mã khách hàng</dt><dd><input value={pakd.customerCode} onChange={(e) => updPakdInfo({ customerCode: e.target.value.toUpperCase() })} className={`${iInp} font-mono`} /></dd></div>
                 <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
                 <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
-                <DRow label="Sale / AM" value={pakd.creator} />
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">PM (Người quản lý dự án)</dt><dd><input value={pakd.pmName || ''} onChange={(e) => updPakdInfo({ pmName: e.target.value })} placeholder="Chưa có" className={iInp} /></dd></div>
+                <DRow label="Người lập" value={pakd.creator} />
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">AM</dt><dd><input value={pakd.am || ''} onChange={(e) => updPakdInfo({ am: e.target.value })} placeholder="—" className={iInp} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Người theo dõi</dt><dd><input value={pakd.followers || ''} onChange={(e) => updPakdInfo({ followers: e.target.value })} placeholder="Ngăn cách bằng dấu phẩy" className={iInp} /></dd></div>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tiến độ (thời gian thực hiện)</dt><dd className="flex items-center gap-1">
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Tiến độ</dt><dd className="flex items-center gap-1">
                   <input type="date" value={pakd.projStart || ''} onChange={(e) => updPakdInfo({ projStart: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
                   <span className="text-gray-400">→</span>
                   <input type="date" value={pakd.projEnd || ''} onChange={(e) => updPakdInfo({ projEnd: e.target.value })} className="text-[11px] border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400" />
                 </dd></div>
               </>) : (<>
-                <DRow label="Phòng ban / Khối" value={pakd.department || '—'} />
+                <DRow label="Khối" value={pakd.department || '—'} />
                 <DRow label="Loại dự án" value={pakd.projectType || '—'} />
-                <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
                 <DRow label="Tên khách hàng" value={pakd.customerName} />
-                <DRow label="Domain" value={pakd.domain || '—'} />
+                <DRow label="Mã khách hàng" value={pakd.customerCode} mono />
                 <DRow label="Giám đốc khối" value={pakd.businessDirector || '—'} />
                 <DRow label="Giám đốc kinh doanh" value={pakd.salesDirector || '—'} />
-                <DRow label="Sale / AM" value={pakd.creator} />
-                <DRow label="PM (Người quản lý dự án)" value={pakd.pmName || '—'} />
+                <DRow label="Người lập" value={pakd.creator} />
+                <DRow label="AM" value={pakd.am || '—'} />
                 <DRow label="Người theo dõi" value={pakd.followers || '—'} />
-                <DRow label="Tiến độ (thời gian thực hiện)" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
+                <DRow label="Tiến độ" value={pakd.projStart || pakd.projEnd ? `${pakd.projStart || '?'} → ${pakd.projEnd || '?'}` : '—'} />
               </>)}
             </dl>
           </div>
@@ -914,21 +915,21 @@ const DetailView: React.FC<{
             <SectionTitle>Tài chính</SectionTitle>
             <dl className="text-[11px] divide-y divide-gray-100">
               {infoEditable ? (<>
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Doanh thu dự kiến</dt><dd><NumberInput value={pakd.revenue} onChange={(v) => updPakdInfo({ revenue: v, expectedContractValue: v, tender: { ...pakd.tender, packagePrice: v } })} className={`${iInp} font-bold`} /></dd></div>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Doanh thu dự kiến tối thiểu</dt><dd><NumberInput value={pakd.revenue} onChange={(v) => updPakdInfo({ revenue: v, expectedContractValue: v, tender: { ...pakd.tender, packagePrice: v } })} className={`${iInp} font-bold`} /></dd></div>
                 <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Chi phí dự kiến</dt><dd><NumberInput value={pakd.expectedCost ?? 0} onChange={(v) => updPakdInfo({ expectedCost: v })} className={`${iInp} text-red-600 font-semibold`} /></dd></div>
               </>) : (<>
-                <DRow label="Doanh thu dự kiến" value={fmtFull(pakd.revenue)} strong />
+                <DRow label="Doanh thu dự kiến tối thiểu" value={fmtFull(pakd.revenue)} strong />
                 <DRow label="Chi phí dự kiến" value={fmtFull(pakd.expectedCost ?? 0)} className="text-red-600" />
               </>)}
               <DRow label="Lợi nhuận gộp dự kiến" value={`${fmtFull(pakd.revenue - (pakd.expectedCost ?? 0))} (${pakd.revenue ? (((pakd.revenue - (pakd.expectedCost ?? 0)) / pakd.revenue) * 100).toFixed(1) : 0}%)`} className={pakd.revenue - (pakd.expectedCost ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} strong />
               {infoEditable ? (
-                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Hợp đồng đã ký</dt><dd>
+                <div className="flex justify-between items-center py-1 gap-4"><dt className="text-gray-500">Đã ký hợp đồng</dt><dd>
                   <select value={pakd.contractSigned ? '1' : '0'} onChange={(e) => updPakdInfo({ contractSigned: e.target.value === '1' })} className={iInp}>
                     <option value="0">Chưa ký</option><option value="1">Đã ký</option>
                   </select>
                 </dd></div>
               ) : (
-                <DRow label="Hợp đồng đã ký" value={pakd.contractSigned ? 'Đã ký' : 'Chưa ký'} className={pakd.contractSigned ? 'text-green-600' : 'text-gray-500'} />
+                <DRow label="Đã ký hợp đồng" value={pakd.contractSigned ? 'Đã ký' : 'Chưa ký'} className={pakd.contractSigned ? 'text-green-600' : 'text-gray-500'} />
               )}
             </dl>
           </div>

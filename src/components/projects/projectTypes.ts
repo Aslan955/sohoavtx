@@ -219,6 +219,7 @@ export interface Pakd {
   revenue: number; // Giá dự thầu (doanh thu dự kiến)
   steps: ProjectStep[]; // 6 phương án chi phí KH01..KH06 (Kinh doanh)
   currentPhase?: number; // giai đoạn hiện tại (1..6); các KH < giá trị này coi như đã hoàn thành
+  phaseManual?: boolean; // currentPhase do người dùng đặt tay (kéo thả / chọn) — không suy ra từ dữ liệu giai đoạn nữa
   costVersions?: number; // số cột điều chỉnh đang hiển thị (0 = chỉ dự kiến; 1 = có Ver2; 2 = có Ver2,Ver3...)
   productionTasks: ProductionTask[]; // giai đoạn triển khai của Khối sản xuất
   locked: boolean; // bảng chi phí bị khóa sau khi GĐ Khối duyệt
@@ -238,10 +239,11 @@ export interface Pakd {
   versionSnaps?: PlanVersionSnap[]; // ảnh chụp các phiên bản đã chốt (xem lại read-only)
   pendingAdjustReason?: string; // lý do điều chỉnh đang chờ duyệt lại (hiển thị cho các cấp duyệt), xóa khi hoàn tất
   isKeyProject?: boolean; // dự án trọng điểm (đánh dấu để ưu tiên theo dõi)
-  department?: string;    // Phòng ban / Khối phụ trách
-  projectType?: string;   // Loại dự án (Fixed Cost / R&D / ODC / Staffing...)
+  department?: string;    // Khối phụ trách
+  projectType?: string;   // Project type (Fixed Cost / R&D / ODC / Staffing...)
   followers?: string;     // Người theo dõi (danh sách, phân tách bằng dấu phẩy)
-  contractSigned?: boolean; // Hợp đồng đã ký hay chưa
+  contractSigned?: boolean; // Đã ký hợp đồng hay chưa
+  am?: string;            // Account Manager (khác Người lập)
   businessPM?: string;    // PM (quản trị dự án) phụ trách mã kinh doanh
   productionPM?: string;  // PM phụ trách mã sản xuất
   accountingSpends?: AccountingSpend[]; // chi thực tế do Kế toán import hàng tháng (theo dự án)
@@ -370,3 +372,16 @@ export const stepActualCost = (step: ProjectStep): number => step.costItems.redu
 export const pakdTotalCost = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + stepCost(st), 0);
 export const pakdActualCost = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + stepActualCost(st), 0);
 export const pakdStepRevenue = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + (st.revenue || 0), 0);
+
+// Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
+export const stepHasInfo = (s: ProjectStep): boolean =>
+  !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
+
+// Giai đoạn hiện tại của 1 PAKD.
+// Khi người dùng đã tự đặt (phaseManual) thì lấy đúng giá trị đó — nếu không sẽ suy ra
+// từ KH xa nhất đã có thông tin, để dữ liệu cũ/import vẫn hiển thị đúng.
+export const effectiveCurrentPhase = (p: Pakd): number => {
+  if (p.phaseManual) return Math.min(Math.max(p.currentPhase || 1, 1), p.steps.length || 1);
+  const furthest = p.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0);
+  return Math.max(p.currentPhase || 1, furthest);
+};

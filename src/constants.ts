@@ -24,7 +24,8 @@ import {
   Inbox,
   PieChart,
   BellRing,
-  UserPlus
+  UserPlus,
+  Columns3
 } from 'lucide-react';
 
 export interface NavItem {
@@ -40,6 +41,8 @@ export const NAVIGATION: NavItem[] = [
     icon: BarChart3,
     children: [
       { title: 'Projects', icon: Briefcase },
+      { title: 'Bảng giai đoạn', icon: Columns3 },
+      { title: 'Chi thực tế (Kế toán)', icon: Wallet },
     ]
   },
 ];

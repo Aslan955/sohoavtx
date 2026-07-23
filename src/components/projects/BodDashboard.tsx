@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, TrendingDown, Clock, CheckCircle2, FileEdit, Eye, Ban, Wallet, Layers, Star } from 'lucide-react';
-import { Pakd, ProjectStep } from './projectTypes';
+import { Pakd, effectiveCurrentPhase } from './projectTypes';
 import { khCode } from './projectData';
 import { PAKD_STATUS_LABEL, PAKD_PENDING_ROLE } from './projectWorkflow';
 
@@ -12,8 +12,7 @@ const THRESHOLDS = {
 
 const fmtMoney = (v: number) => v >= 1_000_000_000 ? `${(v / 1_000_000_000).toFixed(2)} tỷ` : `${v.toLocaleString('vi-VN')} đ`;
 
-const stepHasInfo = (s: ProjectStep) => !!(s.startDate || s.endDate || (s.objective || '').trim() || (s.output || '').trim() || (s.productionBudget || 0) > 0 || (s.businessBudget || 0) > 0);
-const curPhase = (p: Pakd) => Math.max(p.currentPhase || 1, p.steps.reduce((acc, s, i) => stepHasInfo(s) ? i + 1 : acc, 0));
+const curPhase = effectiveCurrentPhase;
 
 const budgetOf = (p: Pakd) => p.steps.reduce((s, st) => s + (st.productionBudget || 0) + (st.businessBudget || 0), 0);
 // Chi thực tế = tổng do Kế toán import (sản xuất + kinh doanh)

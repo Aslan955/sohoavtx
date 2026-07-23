@@ -322,6 +322,48 @@ export function hasOpenChangeRequest(pakd: Pakd): boolean {
 }
 
 
+// ===================== Chuyển giai đoạn trực tiếp trên bảng Kanban =====================
+// Kéo thẻ sang cột KH khác: đổi giai đoạn hiện tại ngay và ghi thông tin kế hoạch của giai đoạn đích.
+// Khác với luồng requestPhaseAdvance (4 cấp duyệt) — đây là thao tác điều phối nhanh, có ghi nhật ký đầy đủ.
+export const KANBAN_MOVE_ROLES: UserRole[] = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR', 'BOD', 'ADMIN'];
+
+export interface PhasePlanInput {
+  objective: string;
+  output: string;
+  startDate?: string;
+  endDate?: string;
+  reason?: string;
+}
+
+export function movePakdPhase(
+  pakd: Pakd, targetOrder: number, plan: PhasePlanInput, actor: string, role: UserRole, log: AuditLogEntry[],
+): { pakd: Pakd; error?: string } {
+  if (!KANBAN_MOVE_ROLES.includes(role)) return { pakd, error: 'Vai trò của bạn không được chuyển giai đoạn dự án.' };
+  if (targetOrder < 1 || targetOrder > pakd.steps.length) return { pakd, error: 'Giai đoạn đích không hợp lệ.' };
+  const target = pakd.steps[targetOrder - 1];
+  if (!target) return { pakd, error: 'Không tìm thấy giai đoạn đích.' };
+  if (!plan.objective.trim()) return { pakd, error: 'Nhập mục tiêu (đầu vào) của giai đoạn đích.' };
+  if (!plan.output.trim()) return { pakd, error: 'Nhập kết quả đầu ra của giai đoạn đích.' };
+  if (plan.startDate && plan.endDate && plan.startDate > plan.endDate) {
+    return { pakd, error: 'Ngày bắt đầu phải trước ngày kết thúc.' };
+  }
+
+  const from = Math.min(Math.max(pakd.currentPhase || 1, 1), pakd.steps.length);
+  const updated: Pakd = {
+    ...pakd,
+    currentPhase: targetOrder,
+    phaseManual: true,
+    steps: pakd.steps.map((s, i) => i === targetOrder - 1
+      ? { ...s, objective: plan.objective.trim(), output: plan.output.trim(), startDate: plan.startDate || s.startDate, endDate: plan.endDate || s.endDate }
+      : s),
+  };
+  const code = (n: number) => `KH${String(n).padStart(2, '0')}`;
+  pushAudit(log, updated, actor, role, `Chuyển giai đoạn ${code(from)} → ${code(targetOrder)} (bảng Kanban)`,
+    code(from), code(targetOrder),
+    `${plan.reason?.trim() ? `Lý do: ${plan.reason.trim()}. ` : ''}Mục tiêu: ${plan.objective.trim()} | Đầu ra: ${plan.output.trim()}`);
+  return { pakd: updated };
+}
+
 // ===================== Duyệt chuyển giai đoạn (AM → GĐ Kinh doanh → GĐ Khối → Kế toán → BOD) =====================
 type AdvStatus = 'PENDING_SALES_DIRECTOR' | 'PENDING_BUSINESS_DIRECTOR' | 'PENDING_ACCOUNTANT' | 'PENDING_BOD';
 export const ADV_STEPS: AdvStatus[] = ['PENDING_SALES_DIRECTOR', 'PENDING_BUSINESS_DIRECTOR', 'PENDING_ACCOUNTANT', 'PENDING_BOD'];

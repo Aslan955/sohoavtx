@@ -122,6 +122,7 @@ export const PROJECT_MANAGERS = [
 ];
 export const FIELD_TYPES = ['Hàng hóa CNTT', 'Dịch vụ phi tư vấn', 'Dịch vụ tư vấn', 'Xây lắp hạ tầng CNTT', 'Hỗn hợp'];
 export const CONTRACT_TYPES = ['Trọn gói', 'Theo đơn giá điều chỉnh', 'Theo đơn giá cố định'];
+export const PROJECT_TYPES = ['Internal', 'Fixed Cost', 'ODC'];
 
 export const CUSTOMERS = [
   { code: 'VIETTEL', name: 'Tập đoàn Viễn thông Quân đội (Viettel)' },
@@ -139,6 +140,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-05-10 09:30',
     status: 'COMPLETED',
+    projectType: 'Fixed Cost',
     tender: { packageCode: 'TBMT-26.0456', investor: 'Tập đoàn Viễn thông Quân đội (Viettel)', biddingMethod: 'Đấu thầu rộng rãi', fieldType: 'Hàng hóa CNTT', contractType: 'Trọn gói', packagePrice: 47000000000, bidSecurity: 700000000, closeDate: '2026-04-28' },
     revenue: 45000000000,
     locked: true,
@@ -230,6 +232,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-15 15:00',
     status: 'PENDING_BOD',
+    projectType: 'Internal',
     tender: { packageCode: 'TBMT-26.0712', investor: 'Sở Giao thông Vận tải Hà Nội', biddingMethod: 'Đấu thầu rộng rãi', fieldType: 'Hỗn hợp', contractType: 'Theo đơn giá điều chỉnh', packagePrice: 29500000000, bidSecurity: 450000000, closeDate: '2026-06-10' },
     revenue: 28000000000,
     locked: true,
@@ -272,6 +275,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-22 09:00',
     status: 'PENDING_ACCOUNTANT',
+    projectType: 'ODC',
     tender: { packageCode: 'TBMT-26.0820', investor: 'Ngân hàng TMCP Đầu tư và Phát triển VN (BIDV)', biddingMethod: 'Đấu thầu rộng rãi', fieldType: 'Hàng hóa CNTT', contractType: 'Trọn gói', packagePrice: 18000000000, bidSecurity: 270000000, closeDate: '2026-06-19' },
     revenue: 17000000000,
     locked: true,
@@ -315,6 +319,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-24 14:00',
     status: 'COMPLETED',
+    projectType: 'Fixed Cost',
     tender: { packageCode: 'TBMT-26.0830', investor: 'Sở Thông tin và Truyền thông Bắc Ninh', biddingMethod: 'Chào hàng cạnh tranh', fieldType: 'Hàng hóa CNTT', contractType: 'Trọn gói', packagePrice: 7500000000, bidSecurity: 110000000, closeDate: '2026-06-21' },
     revenue: 7000000000,
     locked: true,
@@ -362,6 +367,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-20 14:00',
     status: 'PENDING_BUSINESS_DIRECTOR',
+    projectType: 'Internal',
     tender: { packageCode: 'TBMT-26.0815', investor: 'Ngân hàng TMCP Đầu tư và Phát triển VN (BIDV)', biddingMethod: 'Chào hàng cạnh tranh', fieldType: 'Dịch vụ phi tư vấn', contractType: 'Trọn gói', packagePrice: 9000000000, bidSecurity: 130000000, closeDate: '2026-06-18' },
     revenue: 8500000000,
     outsourceCodes: [],
@@ -390,6 +396,7 @@ const RAW_PAKDS: Pakd[] = [
     creator: 'Lê Thu Trang',
     createdAt: '2026-06-25 10:00',
     status: 'DRAFT',
+    projectType: 'ODC',
     tender: { packageCode: 'TBMT-26.0903', investor: 'Sở Thông tin và Truyền thông Bắc Ninh', biddingMethod: 'Đấu thầu rộng rãi', fieldType: 'Xây lắp hạ tầng CNTT', contractType: 'Theo đơn giá cố định', packagePrice: 12500000000, bidSecurity: 180000000, closeDate: '2026-07-20' },
     revenue: 12000000000,
     outsourceCodes: [],
@@ -468,6 +475,7 @@ function makeSample(status: Pakd['status'], i: number): Pakd {
     projStart: '2026-08-01', projEnd: '2027-02-28',
     expectedContractValue: revenue, expectedCost: Math.round(revenue * 0.6),
     tender: { packageCode: `TBMT-26.${1000 + seq}`, investor: c.name, biddingMethod: BIDDING_METHODS[i % BIDDING_METHODS.length], fieldType: FIELD_TYPES[i % FIELD_TYPES.length], contractType: CONTRACT_TYPES[i % CONTRACT_TYPES.length], packagePrice: Math.round(revenue * 1.05), bidSecurity: Math.round(revenue * 0.015), closeDate: '2026-07-15' },
+    projectType: PROJECT_TYPES[i % PROJECT_TYPES.length],
     revenue,
     steps: makeSteps(revenue),
     ...(hasCode ? { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2`, locked: true } : { locked: false }),

@@ -25,7 +25,11 @@ export default function App() {
       case 'Overview':
         return <DashboardPage onNavigate={setActiveItem} />;
       case 'Projects':
-        return <ProjectsPage />;
+        return <ProjectsPage route="PROJECTS" />;
+      case 'Bảng giai đoạn':
+        return <ProjectsPage route="KANBAN" />;
+      case 'Chi thực tế (Kế toán)':
+        return <ProjectsPage route="ACCOUNTING" />;
       case 'Leaves':
         return <LeavesPage />;
       case 'Timesheet':
