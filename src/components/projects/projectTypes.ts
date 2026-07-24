@@ -3,6 +3,10 @@
 
 export type UserRole = 'SALE' | 'SALES_DIRECTOR' | 'BUSINESS_DIRECTOR' | 'BOD' | 'ACCOUNTANT' | 'IT' | 'PRODUCTION' | 'ADMIN';
 
+// Loại dự án con phát sinh sau khi sản xuất xong — mỗi loại là 1 project riêng,
+// dùng chung mã tổng của dự án cha (CR = <mã tổng>.3, Bảo hành = <mã tổng>.4).
+export type ProjectKind = 'CR' | 'WARRANTY';
+
 export interface SystemUser {
   id: string;
   fullName: string;
@@ -225,8 +229,13 @@ export interface Pakd {
   locked: boolean; // bảng chi phí bị khóa sau khi GĐ Khối duyệt
   version: number;
   masterCode?: string;
-  businessCode?: string;
-  productionCode?: string;
+  businessCode?: string;   // <mã tổng>.1 — chỉ dự án chính
+  productionCode?: string; // <mã tổng>.2 — chỉ dự án chính
+  // Dự án CR / Bảo hành: project riêng, dùng chung mã tổng của dự án cha.
+  // Mã của nó (<mã tổng>.3 / .4) ngang hàng với mã kinh doanh & sản xuất, không có mã con.
+  projectKind?: ProjectKind; // không có = dự án chính
+  parentPakdId?: string;     // id dự án cha (chỉ với CR/BH)
+  projectCode?: string;      // mã riêng: <mã tổng>.3 (CR) hoặc <mã tổng>.4 (Bảo hành)
   outsourceCodes: OutsourceCode[]; // mã con của mã sản xuất, vd 022.689.2.1
   jiraKey?: string;
   jiraUrl?: string;
@@ -372,6 +381,15 @@ export const stepActualCost = (step: ProjectStep): number => step.costItems.redu
 export const pakdTotalCost = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + stepCost(st), 0);
 export const pakdActualCost = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + stepActualCost(st), 0);
 export const pakdStepRevenue = (pakd: Pakd): number => pakd.steps.reduce((s, st) => s + (st.revenue || 0), 0);
+
+// ----- Dự án CR / Bảo hành -----
+export const PROJECT_KIND_LABEL: Record<ProjectKind, string> = { CR: 'CR', WARRANTY: 'Bảo hành' };
+export const PROJECT_KIND_SHORT: Record<ProjectKind, string> = { CR: 'CR', WARRANTY: 'BH' };
+// Hậu tố mã: ngang hàng với mã kinh doanh (.1) và mã sản xuất (.2).
+export const PROJECT_KIND_SUFFIX: Record<ProjectKind, string> = { CR: '3', WARRANTY: '4' };
+
+// Mã hiển thị của 1 PAKD: dự án CR/BH lấy mã riêng (022.689.3), dự án chính lấy mã tổng.
+export const pakdDisplayCode = (p: Pakd): string => p.projectCode || p.masterCode || '';
 
 // Một giai đoạn "có thông tin" khi đã nhập ngày / mục tiêu / kết quả / ngân sách.
 export const stepHasInfo = (s: ProjectStep): boolean =>

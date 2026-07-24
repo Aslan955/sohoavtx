@@ -7,7 +7,7 @@ import {
 import {
   Pakd, ApprovalAction, ApprovalRecord, AuditLogEntry, ProjectStep, CostItem, CostChange, ChangeRequest, ProductionTask, ProductionInfo, PakdComment, UserRole, PlanChangeLog, PlanStepSnap, PlanVersionSnap,
   stepCost, stepActualCost, pakdTotalCost, pakdActualCost, BudgetCategory, BudgetCategoryKind, catAllocated,
-  effectiveCurrentPhase,
+  effectiveCurrentPhase, ProjectKind, PROJECT_KIND_LABEL, PROJECT_KIND_SHORT, pakdDisplayCode,
 } from './projectTypes';
 import {
   INITIAL_PAKDS, SYSTEM_USERS, COST_TYPES, DOMAINS, BUSINESS_DIRECTORS, SALES_DIRECTORS, PROJECT_MANAGERS, PROJECT_TYPES, makePhases, khCode,
@@ -18,6 +18,7 @@ import { CustomersPage, Customer, INITIAL_CUSTOMERS } from './CustomersPage';
 import { AccountingImportPage, accountingTotal } from './AccountingImportPage';
 import { BulkImportPage } from './BulkImportPage';
 import { PhaseKanbanPage } from './PhaseKanbanPage';
+import { CreateProjectModal } from './CreateProjectModal';
 import { AccountingSpend } from './projectTypes';
 import {
   PAKD_STATUS_LABEL, CR_STATUS_LABEL, PAKD_PENDING_ROLE, CR_PENDING_ROLE, PAKD_FLOW,
@@ -26,7 +27,7 @@ import {
   createBudgetAdjustment, decideBudgetAdjustment, BA_STATUS_LABEL, BA_PENDING_ROLE,
   requestPhaseAdvance, decidePhaseAdvance, ADV_STEPS, ADV_LABEL, ADV_PENDING_ROLE, revisePlan, updateActualSpent, editActualSpent, lockedSpentTotal,
   canEditPlanNow, startEditDuringApproval, submitEditDuringApproval, firstPendingStage, applyPlanImport,
-  movePakdPhase,
+  movePakdPhase, createChildPakd,
 } from './projectWorkflow';
 
 type ModuleTab = 'LIST' | 'MINE' | 'APPROVALS' | 'CHANGES' | 'AUDIT' | 'DASHBOARD' | 'BLOCK_DASH' | 'CUSTOMERS' | 'ACCOUNTING' | 'IMPORT';
@@ -120,6 +121,23 @@ export const ProjectsPage: React.FC<{ route?: 'PROJECTS' | 'ACCOUNTING' | 'KANBA
     setPakds(prev => [p, ...prev]);
     setModuleTab('LIST');
     setSelectedId(p.id);
+    setCreateOpen(false);
+  };
+
+  // Mở dự án CR / Bảo hành: project riêng, dùng chung mã tổng của dự án cha.
+  const createChild = (parentId: string, kind: ProjectKind) => {
+    if (!simUser) return;
+    const parent = pakds.find(p => p.id === parentId);
+    if (!parent) { setError('Không tìm thấy dự án cha.'); return; }
+    const log: AuditLogEntry[] = [];
+    const { pakd, error: err } = createChildPakd(parent, kind, simUser.fullName, simUser.role, pakds, log);
+    if (err || !pakd) { setError(err || 'Không tạo được dự án.'); return; }
+    setError('');
+    setAuditLog(prev => [...log, ...prev]);
+    setPakds(prev => [pakd, ...prev]);
+    setModuleTab('LIST');
+    setSelectedId(pakd.id);
+    setCreateOpen(false);
   };
 
   if (!simUser) return <LoginScreen onLogin={login} />;
@@ -174,7 +192,7 @@ export const ProjectsPage: React.FC<{ route?: 'PROJECTS' | 'ACCOUNTING' | 'KANBA
             <button onClick={logout} title="Đăng xuất" className="ml-1 text-gray-400 hover:text-red-600 flex items-center gap-1"><LogOut size={13} /></button>
           </div>
           {route === 'PROJECTS' && ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'].includes(simUser.role) && !current && (
-            <button onClick={createDraftInline} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
+            <button onClick={() => setCreateOpen(true)} className="flex items-center px-4 py-1.5 bg-[#007bff] text-white text-sm font-semibold rounded shadow-sm hover:bg-blue-600 transition-all active:scale-95">
               <Plus size={16} className="mr-1" />Tạo dự án
             </button>
           )}
@@ -185,6 +203,11 @@ export const ProjectsPage: React.FC<{ route?: 'PROJECTS' | 'ACCOUNTING' | 'KANBA
         <div className="mb-3 bg-red-50 border border-red-200 text-red-700 text-xs font-medium px-3 py-2 rounded flex items-center justify-between">
           <span>{error}</span><button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
         </div>
+      )}
+
+      {createOpen && (
+        <CreateProjectModal pakds={pakds} onClose={() => setCreateOpen(false)}
+          onCreateMain={createDraftInline} onCreateChild={createChild} />
       )}
 
       {current ? (
@@ -419,7 +442,7 @@ const ListView: React.FC<{
       <table className="w-full text-[11px] border-collapse">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-            <Th w="36px">#</Th><Th w="90px">Mã tổng</Th><Th w="220px">Tên dự án</Th>
+            <Th w="36px">#</Th><Th w="90px">Mã tổng</Th><Th w="60px" center>Loại hình</Th><Th w="220px">Tên dự án</Th>
             <Th w="110px">Số hiệu gói thầu</Th><Th w="180px">Khách hàng</Th><Th w="120px">Loại dự án</Th>
             <Th w="90px" right>Giá dự thầu</Th><Th w="90px" right>Tổng chi phí</Th><Th w="80px" right>LN (%)</Th>
             <Th w="80px" center>Giai đoạn</Th><Th w="120px">Trạng thái</Th><Th w="50px" center>Ver</Th><Th w="70px" center>Thao tác</Th>
@@ -431,7 +454,8 @@ const ListView: React.FC<{
             return (
               <tr key={p.id} className="border-b border-gray-200 hover:bg-blue-50 transition-colors">
                 <Td center muted>{i + 1}</Td>
-                <Td mono>{p.masterCode ? <span className="text-gray-800 font-semibold">{p.masterCode}</span> : <span className="text-gray-300">—</span>}</Td>
+                <Td mono>{pakdDisplayCode(p) ? <span className="text-gray-800 font-semibold">{pakdDisplayCode(p)}</span> : <span className="text-gray-300">—</span>}</Td>
+                <Td center><KindBadge kind={p.projectKind} /></Td>
                 <Td><span className="text-gray-800 font-medium flex items-center gap-1">{p.isKeyProject && <Star size={12} className="fill-amber-500 text-amber-500 shrink-0" />}{p.name}</span></Td>
                 <Td mono>{p.tender.packageCode}</Td>
                 <Td>{p.customerName}</Td>
@@ -446,12 +470,19 @@ const ListView: React.FC<{
               </tr>
             );
           })}
-          {pakds.length === 0 && <tr><td colSpan={13} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
+          {pakds.length === 0 && <tr><td colSpan={14} className="text-center text-gray-400 py-10 text-xs">Không có PAKD phù hợp.</td></tr>}
         </tbody>
       </table>
     </div>
   </div>
 );
+
+// Nhãn phân biệt dự án CR / Bảo hành với dự án chính.
+const KindBadge: React.FC<{ kind?: ProjectKind }> = ({ kind }) => {
+  if (!kind) return <span className="text-gray-300">—</span>;
+  const cls = kind === 'CR' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-teal-50 text-teal-700 border-teal-200';
+  return <span title={PROJECT_KIND_LABEL[kind]} className={`inline-block px-1.5 py-0.5 rounded border font-bold text-[10px] ${cls}`}>{PROJECT_KIND_SHORT[kind]}</span>;
+};
 
 const FilterTab: React.FC<{ label: string; count: number; active: boolean; onClick: () => void }> = ({ label, count, active, onClick }) => (
   <button onClick={onClick} className={`px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${active ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label} ({count})</button>
@@ -817,6 +848,20 @@ const DetailView: React.FC<{
                   <span className="text-xl font-bold font-mono text-blue-700 tracking-wider leading-tight mt-0.5">{pakd.masterCode}</span>
                 </div>
                 <div className="px-5 py-3 flex-1 flex flex-col justify-center gap-1.5">
+                  {pakd.projectKind ? (
+                    /* Dự án CR / Bảo hành: chỉ có mã riêng (.3/.4), không có mã kinh doanh / sản xuất / outsource */
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã {PROJECT_KIND_LABEL[pakd.projectKind]}</span>
+                        <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{pakd.projectCode}</span>
+                        <KindBadge kind={pakd.projectKind} />
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Dự án riêng, dùng chung mã tổng <b className="font-mono text-gray-700">{pakd.masterCode}</b> của dự án cha.
+                        Mã này ngang hàng với mã kinh doanh <span className="font-mono">{pakd.masterCode}.1</span> và mã sản xuất <span className="font-mono">{pakd.masterCode}.2</span>.
+                      </p>
+                    </>
+                  ) : (<>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mã kinh doanh</span>
                     <span className="text-sm font-bold font-mono text-blue-700 tracking-wider">{pakd.businessCode}</span>
@@ -842,11 +887,15 @@ const DetailView: React.FC<{
                       </span>
                     )}
                   </div>
+                  </>)}
                 </div>
-                <div className="px-4 py-3 flex items-center gap-2 shrink-0">
-                  <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
-                  {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã</button>}
-                </div>
+                {/* Dự án CR/BH lấy mã từ cha nên không cập nhật PM theo mã KD/SX, cũng không sinh lại mã tổng. */}
+                {!pakd.projectKind && (
+                  <div className="px-4 py-3 flex items-center gap-2 shrink-0">
+                    <button onClick={() => setPmOpen(true)} title="Cập nhật PM cho các mã" className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 border border-blue-200 bg-white rounded px-2 py-1 hover:bg-blue-50"><UserCheck size={12} />Cập nhật PM</button>
+                    {editable && pakd.status === 'DRAFT' && <button onClick={() => setPakd(p => ({ ...p, ...generateCodes(p.customerCode) }))} title="Sinh lại mã tổng theo mã khách hàng đang nhập" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 border border-orange-200 bg-white rounded px-2 py-1 hover:bg-orange-50"><RotateCcw size={12} />Sinh lại mã</button>}
+                  </div>
+                )}
               </div>
 
               {/* Mở mã outsource: hiện ngay sau khi tạo dự án (đã có mã sản xuất) cho các vai trò tạo được dự án, kể cả còn nháp */}
@@ -2754,84 +2803,6 @@ const RevisePlanModal: React.FC<{ pakd: Pakd; simUser: any; onClose: () => void;
             <button onClick={() => { if (!reason.trim()) { setErr('Nhập lý do điều chỉnh.'); return; } onSubmit(reason.trim()); }} className="flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700"><FileEdit size={13} className="mr-1" />Mở lại & duyệt lại từ đầu</button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
-
-// ===================== CREATE MODAL =====================
-const CreateModal: React.FC<{ onClose: () => void; creator: string; customers: Customer[]; onGotoCustomers: () => void; onCreate: (p: Pakd) => void }> = ({ onClose, creator, customers, onGotoCustomers, onCreate }) => {
-  const [f, setF] = useState({
-    name: '', customerId: '', businessDirector: BUSINESS_DIRECTORS[0], salesDirector: SALES_DIRECTORS[0] as string, domain: DOMAINS[0],
-    projStart: '', projEnd: '', expectedContractValue: 0, expectedCost: 0,
-  });
-  const [err, setErr] = useState('');
-  const selectedCustomer = customers.find(c => c.id === f.customerId);
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!f.name.trim()) { setErr('Cần nhập Tên dự án.'); return; }
-    if (!selectedCustomer) { setErr('Vui lòng chọn khách hàng từ danh mục.'); return; }
-    if (f.expectedContractValue <= 0) { setErr('Giá trị hợp đồng dự kiến phải > 0.'); return; }
-    // Mã tổng dự án = <mã khách hàng>.<3 số random> (sinh ngay khi tạo)
-    const codes = generateCodes(selectedCustomer.code);
-    onCreate({
-      id: `PAKD-${Math.floor(100 + Math.random() * 899)}`, name: f.name, customerName: selectedCustomer.name,
-      customerCode: selectedCustomer.code,
-      creator, createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'DRAFT',
-      businessDirector: f.businessDirector, salesDirector: f.salesDirector, domain: selectedCustomer.domain || f.domain, projStart: f.projStart, projEnd: f.projEnd,
-      expectedContractValue: f.expectedContractValue, expectedCost: f.expectedCost,
-      ...codes,
-      tender: { packageCode: '', investor: selectedCustomer.name, biddingMethod: '', fieldType: '', contractType: '', packagePrice: f.expectedContractValue, bidSecurity: 0, closeDate: '' },
-      revenue: f.expectedContractValue, steps: makePhases(), costVersions: 0, productionTasks: [], outsourceCodes: [], locked: false, version: 1, approvalHistory: [], changeRequests: [], versionHistory: [],
-    });
-  };
-  const inp = 'w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-400';
-  const lab = 'text-[11px] font-semibold text-gray-500';
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded shadow-lg w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
-          <div>
-            <h3 className="font-bold text-sm text-gray-900">Tạo phương án kinh doanh</h3>
-            <p className="text-[11px] text-gray-500 mt-0.5">Lưu ở dạng <b>nháp</b> — bạn có thể chỉnh sửa tiếp trước khi nộp trình duyệt.</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
-        </div>
-        {err && <p className="text-xs text-red-600 font-medium px-5 pt-3">{err}</p>}
-        <form onSubmit={submit} className="p-5 grid grid-cols-2 gap-3">
-          <div className="col-span-2 space-y-1"><label className={lab}>Tên dự án *</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
-          <div className="col-span-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <label className={lab}>Khách hàng * <span className="text-gray-400 font-normal">(chọn từ danh mục — mã tổng dự án lấy theo mã khách hàng)</span></label>
-              <button type="button" onClick={onGotoCustomers} className="text-[11px] text-blue-600 hover:underline">+ Thêm khách hàng mới</button>
-            </div>
-            <select value={f.customerId} onChange={(e) => setF({ ...f, customerId: e.target.value })} className={inp}>
-              <option value="">— Chọn khách hàng —</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-            </select>
-            {selectedCustomer && <p className="text-[10px] text-gray-500">Mã KH: <b className="font-mono text-blue-700">{selectedCustomer.code}</b> → Mã tổng dự án sẽ là <b className="font-mono text-blue-700">{selectedCustomer.code}.xxx</b></p>}
-          </div>
-          <div className="space-y-1"><label className={lab}>Giám đốc khối</label><select value={f.businessDirector} onChange={(e) => setF({ ...f, businessDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Khối duyệt) —</option>{BUSINESS_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Giám đốc kinh doanh</label><select value={f.salesDirector} onChange={(e) => setF({ ...f, salesDirector: e.target.value })} className={inp}><option value="">— Bỏ qua (không cần GĐ Kinh doanh duyệt) —</option>{SALES_DIRECTORS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Domain</label><select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value })} className={inp}>{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
-          <div className="space-y-1"><label className={lab}>Người lập (AM / GĐ Kinh doanh / GĐ Khối)</label><input value={creator} disabled className={`${inp} bg-gray-50 text-gray-500`} /></div>
-          <div className="space-y-1"><label className={lab}>Thời gian bắt đầu</label><input type="date" value={f.projStart} onChange={(e) => setF({ ...f, projStart: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Thời gian kết thúc</label><input type="date" value={f.projEnd} onChange={(e) => setF({ ...f, projEnd: e.target.value })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Doanh thu tối thiểu dự kiến (VNĐ) *</label><NumberInput value={f.expectedContractValue} onChange={(v) => setF({ ...f, expectedContractValue: v })} className={inp} /></div>
-          <div className="space-y-1"><label className={lab}>Chi phí dự kiến (VNĐ)</label><NumberInput value={f.expectedCost} onChange={(v) => setF({ ...f, expectedCost: v })} className={inp} /></div>
-          <div className="col-span-2 space-y-1">
-            <label className={lab}>Lợi nhuận gộp dự kiến (%)</label>
-            {(() => { const p = f.expectedContractValue - f.expectedCost; const m = f.expectedContractValue > 0 ? (p / f.expectedContractValue) * 100 : 0; return (
-              <div className={`w-full text-xs font-bold border rounded px-2.5 py-1.5 ${p >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                {p.toLocaleString('vi-VN')} đ ({m.toFixed(1)}%)
-              </div>
-            ); })()}
-          </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-gray-100 mt-1">
-            <button type="button" onClick={onClose} className={Btn.ghost}>Hủy</button>
-            <button type="submit" className={Btn.primary}><FileEdit size={13} className="mr-1.5" />Lưu</button>
-          </div>
-        </form>
       </div>
     </div>
   );

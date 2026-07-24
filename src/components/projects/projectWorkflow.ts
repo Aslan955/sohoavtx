@@ -3,7 +3,9 @@ import {
   Pakd, PakdStatus, UserRole, ApprovalAction, ApprovalRecord, AuditLogEntry,
   ChangeRequest, ChangeRequestStatus, CostChange, ProjectStep, BudgetAdjustment, BudgetAdjStatus, pakdTotalCost,
   PlanChangeLog, PlanVersionSnap, PlanStepSnap,
+  ProjectKind, PROJECT_KIND_LABEL, PROJECT_KIND_SUFFIX,
 } from './projectTypes';
+import { makePhases } from './projectData';
 
 const nowStr = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
 export const rid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
@@ -118,6 +120,54 @@ export function generateCodes(customerCode: string): Pick<Pakd, 'masterCode' | '
   }
   const master = `${prefix}.${seq}`;
   return { masterCode: master, businessCode: `${master}.1`, productionCode: `${master}.2` };
+}
+
+// ===================== Dự án CR / Bảo hành =====================
+// Là project riêng nhưng dùng chung mã tổng của dự án cha. Mã của nó (<mã tổng>.3 / .4)
+// ngang hàng với mã kinh doanh (.1) và mã sản xuất (.2) — không sinh mã con bên dưới.
+export const CREATE_PROJECT_ROLES: UserRole[] = ['SALE', 'SALES_DIRECTOR', 'BUSINESS_DIRECTOR'];
+
+// Dự án cha đã mở loại con này chưa (mỗi cha chỉ 1 CR + 1 Bảo hành).
+export const childOfKind = (all: Pakd[], parentId: string, kind: ProjectKind): Pakd | undefined =>
+  all.find(p => p.parentPakdId === parentId && p.projectKind === kind);
+
+// Dự án đủ điều kiện làm cha: là dự án chính và đã được cấp mã tổng.
+export const canBeParent = (p: Pakd): boolean => !p.projectKind && !!p.masterCode;
+
+export function createChildPakd(
+  parent: Pakd, kind: ProjectKind, actor: string, role: UserRole, allPakds: Pakd[], log: AuditLogEntry[],
+): { pakd?: Pakd; error?: string } {
+  const label = PROJECT_KIND_LABEL[kind];
+  if (!CREATE_PROJECT_ROLES.includes(role)) return { error: 'Vai trò của bạn không được tạo dự án.' };
+  if (parent.projectKind) {
+    return { error: `Không mở được dự án con từ một dự án ${PROJECT_KIND_LABEL[parent.projectKind]}. Hãy chọn dự án chính làm dự án cha.` };
+  }
+  if (!parent.masterCode) return { error: 'Dự án cha chưa được cấp mã tổng nên chưa mở được dự án CR / Bảo hành.' };
+  const dup = childOfKind(allPakds, parent.id, kind);
+  if (dup) return { error: `Dự án này đã có ${label} rồi (mã ${dup.projectCode}). Mỗi dự án chỉ mở được 1 CR và 1 Bảo hành.` };
+
+  const projectCode = `${parent.masterCode}.${PROJECT_KIND_SUFFIX[kind]}`;
+  const taken = new Set(allPakds.map(p => p.id));
+  let id = `PAKD-${Math.floor(100 + Math.random() * 899)}`;
+  while (taken.has(id)) id = `PAKD-${Math.floor(100 + Math.random() * 899)}`;
+
+  const child: Pakd = {
+    id,
+    name: `[${label}] ${parent.name || '(chưa đặt tên)'}`,
+    customerName: parent.customerName, customerCode: parent.customerCode,
+    creator: actor, createdAt: nowStr(), status: 'DRAFT',
+    businessDirector: parent.businessDirector, salesDirector: parent.salesDirector, domain: parent.domain,
+    projectKind: kind, parentPakdId: parent.id,
+    // Dùng chung mã tổng của cha; chỉ có mã riêng .3/.4, không có mã kinh doanh / sản xuất.
+    masterCode: parent.masterCode, projectCode,
+    tender: { packageCode: '', investor: parent.customerName, biddingMethod: '', fieldType: '', contractType: '', packagePrice: 0, bidSecurity: 0, closeDate: '' },
+    revenue: 0, steps: makePhases(), costVersions: 0, currentPhase: 1,
+    productionTasks: [], outsourceCodes: [], locked: false, version: 1,
+    approvalHistory: [], changeRequests: [], versionHistory: [],
+  };
+  pushAudit(log, child, actor, role, `Tạo dự án ${label} — mã ${projectCode}`, undefined, PAKD_STATUS_LABEL.DRAFT,
+    `Mở từ dự án ${parent.masterCode} (${parent.name || 'chưa đặt tên'}). Dùng chung mã tổng, mã ${label} ngang hàng mã kinh doanh / sản xuất.`);
+  return { pakd: child };
 }
 
 const PAKD_NEXT_ON_APPROVE: Partial<Record<PakdStatus, PakdStatus>> = {
